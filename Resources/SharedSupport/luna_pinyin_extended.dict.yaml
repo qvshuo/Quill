@@ -1,0 +1,14 @@
+# Rime dictionary
+# encoding: utf-8
+
+---
+name: luna_pinyin_extended
+version: "2026-07-20"
+import_tables:
+  - cn_dicts/8105
+  - cn_dicts/41448
+  - cn_dicts/base
+  - cn_dicts/zhwiktionary
+  - cn_dicts/zhwiki
+  - cn_dicts/buzzwords
+  - cn_dicts/yuanshen

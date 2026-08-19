@@ -1,0 +1,53 @@
+{
+  "layout": "qwerty",
+  "rows": [
+    {
+      "keys": [
+        { "label": "q", "action": { "type": "character", "value": "q" } },
+        { "label": "w", "action": { "type": "character", "value": "w" } },
+        { "label": "e", "action": { "type": "character", "value": "e" } },
+        { "label": "r", "action": { "type": "character", "value": "r" } },
+        { "label": "t", "action": { "type": "character", "value": "t" } },
+        { "label": "y", "action": { "type": "character", "value": "y" } },
+        { "label": "u", "action": { "type": "character", "value": "u" } },
+        { "label": "i", "action": { "type": "character", "value": "i" } },
+        { "label": "o", "action": { "type": "character", "value": "o" } },
+        { "label": "p", "action": { "type": "character", "value": "p" } }
+      ]
+    },
+    {
+      "keys": [
+        { "label": "a", "action": { "type": "character", "value": "a" } },
+        { "label": "s", "action": { "type": "character", "value": "s" } },
+        { "label": "d", "action": { "type": "character", "value": "d" } },
+        { "label": "f", "action": { "type": "character", "value": "f" } },
+        { "label": "g", "action": { "type": "character", "value": "g" } },
+        { "label": "h", "action": { "type": "character", "value": "h" } },
+        { "label": "j", "action": { "type": "character", "value": "j" } },
+        { "label": "k", "action": { "type": "character", "value": "k" } },
+        { "label": "l", "action": { "type": "character", "value": "l" } }
+      ]
+    },
+    {
+      "keys": [
+        { "label": "⇧", "action": { "type": "shift" }, "style": "special", "fixed": 45 },
+        { "label": "z", "action": { "type": "character", "value": "z" } },
+        { "label": "x", "action": { "type": "character", "value": "x" } },
+        { "label": "c", "action": { "type": "character", "value": "c" } },
+        { "label": "v", "action": { "type": "character", "value": "v" } },
+        { "label": "b", "action": { "type": "character", "value": "b" } },
+        { "label": "n", "action": { "type": "character", "value": "n" } },
+        { "label": "m", "action": { "type": "character", "value": "m" } },
+        { "label": "⌫", "action": { "type": "backspace" }, "style": "special", "fixed": 45 }
+      ]
+    },
+    {
+      "keys": [
+        { "label": "123", "action": { "type": "numbers" }, "style": "special", "fixed": 67.5 },
+        { "label": "", "action": { "type": "space" }, "style": "normal", "width": 5.0 },
+        { "label": "中", "action": { "type": "toggleLanguage" }, "style": "special", "fixed": 45 },
+        { "label": "⏎", "action": { "type": "return" }, "style": "special", "width": 1.5 }
+      ]
+    }
+  ]
+}

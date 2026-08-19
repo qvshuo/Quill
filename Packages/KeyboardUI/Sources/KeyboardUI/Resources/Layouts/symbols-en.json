@@ -1,0 +1,52 @@
+{
+  "layout": "symbols-en",
+  "rows": [
+    {
+      "keys": [
+        { "label": "[", "action": { "type": "character", "value": "[" } },
+        { "label": "]", "action": { "type": "character", "value": "]" } },
+        { "label": "{", "action": { "type": "character", "value": "{" } },
+        { "label": "}", "action": { "type": "character", "value": "}" } },
+        { "label": "#", "action": { "type": "character", "value": "#" } },
+        { "label": "%", "action": { "type": "character", "value": "%" } },
+        { "label": "^", "action": { "type": "character", "value": "^" } },
+        { "label": "*", "action": { "type": "character", "value": "*" } },
+        { "label": "+", "action": { "type": "character", "value": "+" } },
+        { "label": "=", "action": { "type": "character", "value": "=" } }
+      ]
+    },
+    {
+      "keys": [
+        { "label": "_", "action": { "type": "character", "value": "_" } },
+        { "label": "\\", "action": { "type": "character", "value": "\\" } },
+        { "label": "|", "action": { "type": "character", "value": "|" } },
+        { "label": "~", "action": { "type": "character", "value": "~" } },
+        { "label": "<", "action": { "type": "character", "value": "<" } },
+        { "label": ">", "action": { "type": "character", "value": ">" } },
+        { "label": "€", "action": { "type": "character", "value": "€" } },
+        { "label": "£", "action": { "type": "character", "value": "£" } },
+        { "label": "¥", "action": { "type": "character", "value": "¥" } },
+        { "label": "•", "action": { "type": "character", "value": "•" } }
+      ]
+    },
+    {
+      "keys": [
+        { "label": "123", "action": { "type": "numbers" }, "style": "special", "fixed": 45 },
+        { "label": ".", "action": { "type": "character", "value": "." } },
+        { "label": ",", "action": { "type": "character", "value": "," } },
+        { "label": "?", "action": { "type": "character", "value": "?" } },
+        { "label": "!", "action": { "type": "character", "value": "!" } },
+        { "label": "'", "action": { "type": "character", "value": "'" } },
+        { "label": "⌫", "action": { "type": "backspace" }, "style": "special", "fixed": 45 }
+      ]
+    },
+    {
+      "keys": [
+        { "label": "ABC", "action": { "type": "letters" }, "style": "special", "fixed": 67.5 },
+        { "label": "", "action": { "type": "space" }, "style": "normal", "width": 5.0 },
+        { "label": "中", "action": { "type": "toggleLanguage" }, "style": "special", "fixed": 45 },
+        { "label": "⏎", "action": { "type": "return" }, "style": "special", "width": 1.5 }
+      ]
+    }
+  ]
+}

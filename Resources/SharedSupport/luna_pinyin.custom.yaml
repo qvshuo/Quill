@@ -1,0 +1,79 @@
+# https://github.com/rime/rime-luna-pinyin/blob/master/luna_pinyin.schema.yaml
+# https://github.com/iDvel/rime-ice/blob/main/rime_ice.schema.yaml
+
+patch:
+  schema/dependencies:
+    - melt_eng  # 英文输入，作为次翻译器挂载到拼音方案
+
+  engine/translators:
+    - punct_translator
+    - table_translator@custom_phrase
+    - reverse_lookup_translator
+    - script_translator
+    - table_translator@melt_eng  # 英文输入
+  engine/filters:
+    - simplifier
+    - uniquifier
+    - lua_filter@*reduce_english_filter  # 降低部分英语单词在候选项的位置
+
+  # Lua 配置: 降低部分英语单词在候选项的位置。
+  # 详细介绍 https://dvel.me/posts/make-rime-en-better/#短单词置顶的问题
+  # 正常情况： 输入 rug 得到 「1.rug 2.如果 …… 」
+  # 降低之后： 输入 rug 得到 「1.如果 2.rug …… 」
+  # 几种模式：
+  # all     降低脚本内置的单词（所有 3~4 位长度、前 2~3 位是完整拼音、最后一位是声母），words 作为自定义的额外补充
+  # custom  完全自定义，只降低 words 里的
+  # none    不降低任何单词，相当于没有启用这个 Lua
+  # （匹配的是编码，不是单词）
+  reduce_english_filter:
+    mode: all  # all | custom | none
+    idx: 2        # 降低到第 idx 个位置
+    # 自定义的单词列表，示例列表没有降低部分常用单词，如 and cat mail Mac but bad shit ……
+    words: [
+      aid, ann,
+      bail, bait, bam, band, bans, bat, bay, bend, bent, benz, bib, bid, bien, biz, boc, bop, bos, bud, buf, bus, bach, bench, bush, bog,
+      cab, cad, cain, cam, cans, cap, cef, chad, chan, chap, chef, cher, chew, chic, chime, chin, chip, chit, coup, cum, cunt, cur, couch,
+      dab, dag, dal, dam, dent, dew, dial, diet, dim, din, dip, dis, dit, doug, dub, dug, dunn, don,
+      fab, fax, fob, fog, foul, fur, fend,
+      gag, gail, gain, gal, gam, gaol, ged, gel, ger, guam, gus, gut,
+      hail, ham, hank, hans, hat, hay, heil, heir, hem, hep, hex, hud, hum, hung, hunk, hut, hush,
+      jim, jug,
+      kat,
+      lab, lad, lag, laid, lam, laos, lap, lat, lax, lay, led, leg, lex, liam, lib, lichen, lid, lied, lien, lies, linn, lip, lit, liz, lob, lug, lund, lung, lux, lash, loch, lush,
+      mag, maid, mann, mar, mat, med, mel, mend, mens, ment, mil, mins, mint, mob, moc, mop, mos, mot, mud, mug, mum, mesh,
+      nap, nat, nay, neil, nib, nip, noun, nous, nun, nut, nail, nash,
+      pac, paid, pail, pain, pair, pak, pal, pam, pans, pant, pap, par, pat, paw, pax, pens, pic, pier, pies, pins, pint, pit, pix, pod, pop, pos, posh, pot, pour, pow, pub, pinch, pouch,
+      rand, rant, rent, rep, res, ret, rex, rib, rid, rig, rim, rub, rug, rum, runc, runs, ranch,
+      sac, sail, sal, sam, sans, sap, saw, sax, sew, sham, shaw, shin, sig, sin, sip, sis, suit, sung, suns, sup, sur, sus,
+      tad, tail, taj, tar, tax, tec, ted, tel, ter, tex, tic, tied, tier, ties, tim, tin, tit, tour, tout, tum,
+      wag, wand, womens, wap, wax, weir, won, went,
+      yan, yen,
+      zach,
+      my, mt, dj, as, js, cs, ak, ps, cd, cn, hk, bt, pk, ml  # 一些由算法转写的大写单词编码，会影响简拼（全拼专有）
+    ]
+
+  # 主翻译器，拼音
+  translator/dictionary: luna_pinyin_extended  # 挂载词库 luna_pinyin_extended.dict.yaml
+  translator/initial_quality: 1.2              # 拼音的权重应该比英文大
+
+  # 次翻译器，英文
+  melt_eng:
+    dictionary: melt_eng     # 挂载词库 melt_eng.dict.yaml
+    enable_sentence: false   # 禁止造句
+    enable_user_dict: false  # 禁用用户词典
+    initial_quality: 1.1     # 初始权重
+    comment_format:          # 自定义提示码
+      - xform/.*//           # 清空提示码
+
+  custom_phrase/initial_quality: 99  # custom_phrase 的权重应该比 pinyin 和 melt_eng 大
+
+  # 语言模型
+  grammar:
+    language: lm_sc
+    non_collocation_penalty: -4
+    collocation_max_length: 5
+    collocation_min_length: 2
+    collocation_penalty: -14
+  translator/contextual_suggestions: true
+  translator/max_homophones: 4
+  translator/max_homographs: 2

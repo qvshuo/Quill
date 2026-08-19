@@ -1,0 +1,21 @@
+patch:
+  schema_list:
+    - schema: luna_pinyin
+    - schema: japanese
+
+  switcher/hotkeys:
+    - Control+grave
+    - Control+Shift+grave
+    - F4
+    - Shift+F4
+  
+  menu/page_size: 7
+
+  ascii_composer:
+    good_old_caps_lock: true
+    switch_key:
+      Caps_Lock: "inline_ascii"
+      Shift_L: "commit_code"
+      Shift_R: "commit_code"
+      Control_L: "noop"
+      Control_R: "noop"

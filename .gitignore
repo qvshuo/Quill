@@ -1,0 +1,22 @@
+.DS_Store
+
+# build artifacts
+build/
+.build/
+.build-host/
+DerivedData/
+
+# prebuilt rime data IS committed (needed to run without deploy)
+!Resources/SharedSupport/build/
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+
+# archives
+*.ipa
+*.zip
+*.tgz
+
+# SwiftPM
+.swiftpm/

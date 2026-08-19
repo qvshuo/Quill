@@ -1,0 +1,4 @@
+module RimeEngineC {
+    umbrella header "Rime.h"
+    export *
+}

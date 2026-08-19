@@ -1,0 +1,181 @@
+import Foundation
+@preconcurrency import RimeEngineC
+
+extension RimeContext {
+    // MARK: - Lifecycle
+
+    /// 主 App 与键盘扩展通用的启动入口：setup → initialize，不部署。
+    /// 每个进程只应调用一次（键盘扩展在 `viewDidLoad`，主 App 在设置页 `.task`）。
+    /// `@MainActor`：阻塞性的 librime 初始化在后台任务里完成，会话创建与可观测
+    /// 状态发布回到主线程执行（`@Observable` 状态只在主线程写）。
+    @MainActor
+    public func start() async {
+        redirectStderrToLogFile()
+        guard beginStart() else {
+            NSLog("Quill RIME start: already starting, skip")
+            return
+        }
+        defer { endStart() }
+
+        do {
+            try await Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self else { return }
+                self.prepareUserDirectory()
+                try self.setupOnce()
+                self.setReady(true)
+            }.value
+            // 预热 session：把 session 创建（加载方案、打开用户词库）从第一次按键
+            // 提前到启动阶段，避免第一次点击时的明显迟滞。detached 结束后回到主线程
+            // 再创建，保证可观测状态只在主线程写。
+            createSessionIfNeeded()
+            self.log("RIME ready")
+        } catch {
+            log(error.localizedDescription)
+        }
+    }
+
+    /// 串行化守卫：返回 true 表示获得启动权。
+    private func beginStart() -> Bool {
+        lock.lock()
+        if isStarting {
+            lock.unlock()
+            return false
+        }
+        isStarting = true
+        lock.unlock()
+        return true
+    }
+
+    private func endStart() {
+        lock.lock()
+        isStarting = false
+        lock.unlock()
+    }
+
+    private func setReady(_ value: Bool) {
+        lock.lock()
+        isReady = value
+        lock.unlock()
+    }
+
+    /// 准备用户数据目录并清理崩溃残留：建目录、清 leveldb LOCK、写 installation.yaml。
+    private func prepareUserDirectory() {
+        guard let user = Paths.userDataDirectory else {
+            NSLog("Quill RIME missing user data directory")
+            return
+        }
+        try? FileManager.default.createDirectory(at: user, withIntermediateDirectories: true)
+        // 清理因崩溃未释放的 leveldb LOCK 文件，避免键盘/主 App 反复启动时打不开用户词库。
+        cleanupStaleLocks(in: user)
+        // 确保 installation.yaml 使用当前安装 ID（同步目录名）。
+        ensureInstallationInfo()
+    }
+
+    private func cleanupStaleLocks(in directory: URL) {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        for case let fileURL as URL in enumerator {
+            if fileURL.lastPathComponent == "LOCK" {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
+    }
+
+    private func setupOnce() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isSetup else { return }
+        guard let shared = Paths.sharedSupportDirectory?.path,
+              let user = Paths.userDataDirectory?.path else {
+            NSLog("Quill setupOnce: missing directory shared=%@ user=%@",
+                  Paths.sharedSupportDirectory?.path ?? "nil" as NSString,
+                  Paths.userDataDirectory?.path ?? "nil" as NSString)
+            throw RimeError.missingDirectory
+        }
+
+        var traits = RimeTraits()
+        rimeStructInit(&traits)
+        setCString(shared, to: &traits.shared_data_dir)
+        setCString(user, to: &traits.user_data_dir)
+        setCString(Paths.sharedSupportDirectory?.appendingPathComponent("build", isDirectory: true).path,
+                   to: &traits.prebuilt_data_dir)
+        setCString(Paths.logDirectory?.path, to: &traits.log_dir)
+        setCString("Quill", to: &traits.distribution_name)
+        setCString("Quill", to: &traits.distribution_code_name)
+        setCString("rime.quill", to: &traits.app_name)
+
+        NSLog("Quill RIME setup shared=%@ user=%@", shared as NSString, user as NSString)
+        rimeAPI.setup!(&traits)
+        rimeAPI.initialize!(&traits)
+        // initialize 只加载 kDefaultModules（core/dict/gears），部署任务
+        // （installation_update / backup_config_files / user_dict_sync）由 levers
+        // 模块注册，须用 deployer_initialize 显式加载（幂等，会跳过已加载模块）。
+        // 否则 RimeSyncUserData 调度不到任何任务，直接返回 false（导出报「同步失败」）。
+        rimeAPI.deployer_initialize!(&traits)
+
+        isSetup = true
+        NSLog("Quill RIME setup complete")
+    }
+
+    /// 确保会话有效：无句柄则创建，句柄在 librime 侧失效则销毁重建。
+    /// 内部持锁（`NSRecursiveLock` 可重入），从 `start()` 与 `processKey()` 进入均安全。
+    func createSessionIfNeeded() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isReady else { return }
+        if session == 0 {
+            createSession()
+        } else if !rimeAPI.find_session!(session) {
+            // 会话句柄在 librime 侧已失效（可能被内部清理）：先销毁再重建，
+            // 避免泄漏旧句柄。
+            log("stale session detected, recreating")
+            destroySession()
+            createSession()
+        }
+    }
+
+    private func createSession() {
+        session = rimeAPI.create_session!()
+        NSLog("Quill RIME session created: %lu", session)
+        selectDefaultSchema()
+    }
+
+    /// 创建 session 后锁定 luna_pinyin 方案；缺失则 fallback 第一个可用方案。
+    private func selectDefaultSchema() {
+        guard session != 0 else { return }
+        let schemas = readSchemaList()
+
+        let preferred = "luna_pinyin"
+        if schemas.contains(preferred) {
+            _ = rimeAPI.select_schema!(session, preferred)
+        } else if let first = schemas.first {
+            _ = rimeAPI.select_schema!(session, first)
+        }
+
+        // 按字段类型写入 ascii_mode：.default 中文(false)，.asciiCapable 英文(true)。
+        rimeAPI.set_option!(session, "ascii_mode", pendingAsciiMode)
+    }
+
+    public func destroySession() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard session != 0 else { return }
+        _ = rimeAPI.destroy_session!(session)
+        session = 0
+        log("session destroyed")
+    }
+
+    /// 销毁并立即重建会话，让同步合并后的用户词库 / custom_phrase 生效。
+    /// 手动同步完成（长按空格键）后调用；组合未清空时跳过销毁（避免丢 preedit）。
+    public func recreateSession() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isReady else { return }
+        destroySession()
+        createSessionIfNeeded()
+        refreshContext()
+    }
+}

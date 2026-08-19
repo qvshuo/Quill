@@ -1,0 +1,179 @@
+import Foundation
+import Models
+@preconcurrency import RimeEngineC
+
+extension RimeContext {
+    // MARK: - Input
+
+    @discardableResult
+    public func processKey(_ keyCode: Int32, modifier: Int32 = 0) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isReady else { return false }
+        createSessionIfNeeded()
+        guard session != 0, rimeAPI.find_session!(session) else { return false }
+
+        let handled = rimeAPI.process_key!(session, keyCode, modifier)
+        // 未命中键（如英文直通、未定义键）不会改变 RIME 上下文/commit，
+        // 跳过 refreshContext 免去每次 get_commit + get_context + [Candidate] 重建。
+        // `true` 或产生 commit 的键（librime 对它们返回 handled）照常同步状态。
+        if handled {
+            refreshContext()
+        }
+        return handled
+    }
+
+    /// 展开候选网格时把候选补满到 `candidateBatchSize`（热路径只取当前页）。
+    /// 只在用户展开网格时调用一次，避免每次敲键都在主线程拉满 77 个候选。
+    public func loadExpandedCandidates() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isReady, session != 0, rimeAPI.find_session!(session) else { return }
+        refreshContext(loadAll: true)
+    }
+
+    public func selectCandidate(at index: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isReady, session != 0 else { return }
+        // 全局索引选择：展开网格里可选中任何候选（不限于当前页）。
+        // 注意：本键盘无前后翻页，librime 当前页恒为 0，故候选数组下标 ==
+        // librime 全局下标，`select_candidate`（全局）与页内下标恰好一致。
+        // 若将来引入翻页，页内选择须改用 `select_candidate_on_current_page`。
+        _ = rimeAPI.select_candidate!(session, max(0, index))
+        refreshContext()
+    }
+
+    public func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isReady, session != 0 else { return }
+        rimeAPI.clear_composition!(session)
+        refreshContext()
+    }
+
+    // MARK: - Schema list
+
+    func readSchemaList() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isReady else { return [] }
+        var list = RimeSchemaList()
+        memset(&list, 0, MemoryLayout<RimeSchemaList>.size)
+        guard rimeAPI.get_schema_list!(&list) else { return [] }
+        var result: [String] = []
+        if let items = list.list {
+            for i in 0..<list.size {
+                result.append(stringOrNil(items[i].schema_id) ?? "")
+            }
+        }
+        rimeAPI.free_schema_list!(&list)
+        return result
+    }
+
+    // MARK: - Rime options
+
+    /// 设置 RIME `ascii_mode` 初始值；若会话已存在立即写入，否则 pending 到会话创建时。
+    public func setAsciiMode(_ value: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        pendingAsciiMode = value
+        guard isReady, session != 0 else { return }
+        rimeAPI.set_option!(session, "ascii_mode", value)
+        refreshContext()
+    }
+
+    // MARK: - Context
+
+    /// 取出并清空最近一次按键产生的上屏文本。
+    public func pollCommit() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        let text = commitText
+        commitText = ""
+        return text.isEmpty ? nil : text
+    }
+
+    /// 同步 RIME 状态到可观测属性。commit 是单次语义，必须先于 context 消费。
+    /// `loadAll == false`（按键热路径默认）时只取 RIME 当前页；展开网格时传 `true` 补满 77。
+    func refreshContext(loadAll: Bool = false) {
+        guard isReady, session != 0, rimeAPI.find_session!(session) else {
+            setContext(candidates: [], preedit: "", highlighted: 0)
+            return
+        }
+
+        var commit = RimeCommit()
+        rimeStructInit(&commit)
+        if rimeAPI.get_commit!(session, &commit), let text = stringOrNil(commit.text), !text.isEmpty {
+            commitText = text
+            _ = rimeAPI.free_commit!(&commit)
+            rimeAPI.clear_composition!(session)
+            setContext(candidates: [], preedit: "", highlighted: 0)
+            return
+        }
+        _ = rimeAPI.free_commit!(&commit)
+
+        var ctx = RimeContext_stdbool()
+        rimeStructInit(&ctx)
+        guard rimeAPI.get_context!(session, &ctx) else {
+            setContext(candidates: [], preedit: "", highlighted: 0)
+            return
+        }
+
+        let preedit_text = stringOrNil(ctx.composition.preedit) ?? ""
+        let highlighted = Int(ctx.menu.highlighted_candidate_index)
+
+        var candidates: [Candidate] = []
+        if let list = ctx.menu.candidates {
+            let count = Int(ctx.menu.num_candidates)
+            for i in 0..<count {
+                let candidate = Candidate(text: stringOrNil(list[i].text) ?? "")
+                candidates.append(candidate)
+            }
+        }
+        _ = rimeAPI.free_context!(&ctx)
+
+        // 取满 77 个候选（超出当前页的部分用候选列表迭代器补齐），供展开网格使用。
+        // 热路径（loadAll == false）只保留当前页，补齐仅在展开网格时发生。
+        var batch = candidates
+        if loadAll, batch.count < candidateBatchSize, session != 0 {
+            batch.append(contentsOf: candidateList(from: batch.count, count: candidateBatchSize - batch.count))
+        }
+        setContext(candidates: batch, preedit: preedit_text, highlighted: highlighted)
+    }
+
+    func setContext(candidates: [Candidate], preedit: String, highlighted: Int) {
+        let action = {
+            self.candidates = candidates
+            self.preedit = preedit
+            self.highlightedCandidateIndex = highlighted
+        }
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.async {
+                action()
+            }
+        }
+    }
+
+    // MARK: - Candidate list iteration (RimeCandidateListFromIndex + Next)
+
+    /// 从全局索引 `index` 起取 `count` 个候选。解耦 RIME 分页与 UI 分页
+    /// （Hamster 同款做法），供 77 候选批量加载使用。
+    private func candidateList(from index: Int, count: Int) -> [Candidate] {
+        guard count > 0, session != 0 else { return [] }
+        var iterator = RimeCandidateListIterator(ptr: nil, index: 0,
+                                                 candidate: RimeCandidate(text: nil, comment: nil, reserved: nil))
+        guard rimeAPI.candidate_list_from_index!(session, &iterator, Int32(index)) else { return [] }
+
+        var result: [Candidate] = []
+        let maxIndex = index + count
+        while rimeAPI.candidate_list_next!(&iterator) {
+            if iterator.index >= Int32(maxIndex) { break }
+            result.append(Candidate(text: stringOrNil(iterator.candidate.text) ?? ""))
+        }
+        rimeAPI.candidate_list_end!(&iterator)
+        return result
+    }
+}

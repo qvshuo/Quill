@@ -1,0 +1,146 @@
+name: Quill
+options:
+  bundleIdPrefix: art.anjing.quill
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  defaultConfig: Release
+settings:
+  base:
+    SWIFT_VERSION: "6.2"
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+packages:
+  RimeEngine:
+    path: Packages/RimeEngine
+  Models:
+    path: Packages/Models
+  KeyboardUI:
+    path: Packages/KeyboardUI
+  Sync:
+    path: Packages/Sync
+targets:
+  Quill:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    preBuildScripts:
+      - name: Copy SharedSupport
+        script: cp -R "${SRCROOT}/Resources/SharedSupport" "${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/"
+        basedOnDependencyAnalysis: false
+        outputPaths:
+          - $(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/SharedSupport
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Quill 输入法
+        CFBundleShortVersionString: 1.0.0
+        CFBundleVersion: "1"
+        ITSAppUsesNonExemptEncryption: false
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportsDocumentBrowser: false
+        UILaunchStoryboardName: LaunchScreen
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    entitlements:
+      path: App/Quill.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.art.anjing.quill
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)art.anjing.quill.shared
+    dependencies:
+      - target: QuillKeyboard
+      - package: RimeEngine
+        product: RimeEngine
+      - package: Models
+        product: Models
+      - package: Sync
+        product: Sync
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: art.anjing.quill
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+  QuillKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: QuillKeyboard
+    info:
+      path: QuillKeyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Quill 输入法
+        CFBundleShortVersionString: 1.0.0
+        CFBundleVersion: "1"
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSExtension:
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: zh-Hans
+            RequestsOpenAccess: true
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).InputController
+    entitlements:
+      path: QuillKeyboard/QuillKeyboard.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.art.anjing.quill
+        com.apple.security.network.client: true
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)art.anjing.quill.shared
+    dependencies:
+      - package: RimeEngine
+        product: RimeEngine
+      - package: Models
+        product: Models
+      - package: KeyboardUI
+        product: KeyboardUI
+      - package: Sync
+        product: Sync
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: art.anjing.quill.keyboard
+  QuillKeyboardUITests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: QuillKeyboardUITests
+    dependencies:
+      - package: KeyboardUI
+        product: KeyboardUI
+      - package: RimeEngine
+        product: RimeEngine
+      - package: Models
+        product: Models
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: art.anjing.quill.keyboarduitests
+        GENERATE_INFOPLIST_FILE: true
+schemes:
+  Quill:
+    build:
+      targets:
+        Quill: all
+    run:
+      config: Debug
+      target: Quill
+    test:
+      config: Debug
+      targets:
+        - name: QuillKeyboardUITests
+  QuillKeyboard:
+    build:
+      targets:
+        QuillKeyboard: all
+        Quill: all
+    run:
+      config: Debug
+      target: Quill
+    test:
+      config: Debug
+      targets:
+        - name: QuillKeyboardUITests

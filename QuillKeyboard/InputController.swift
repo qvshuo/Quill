@@ -175,7 +175,8 @@ final class InputController: UIInputViewController {
             }
         case .space:
             // 空格不消耗一次性大写状态（在英文模式下保持首字母大写）。
-            // 组合期间空格一律交 RIME 上屏，不参与双击转换（避免绕过 RIME 插入字面句号）。
+            // 组合期间空格交 RIME 上屏；双击句号转换只在两次都上屏字面空格时生效
+            // （组合期第一下是「选词」，随后快速第二下应是补一个空格，而非变成句号）。
             if rimeContext.preedit.isEmpty, handleDoubleSpaceAsPeriod("。") {
                 return
             }
@@ -190,7 +191,8 @@ final class InputController: UIInputViewController {
                 insertToProxy(" ")
                 markLiteralSpaceInserted()
             } else {
-                markSpaceWithoutLiteralInsert()
+                // 组合期上屏候选：复位双击状态，让紧随的第二次空格按普通空格处理。
+                resetDoubleSpaceState()
             }
         case .startSync:
             // 长按空格键 5 秒触发手动 WebDAV 同步。
@@ -326,10 +328,6 @@ final class InputController: UIInputViewController {
         inputState.hasInputText = true
     }
 
-    private func markSpaceWithoutLiteralInsert() {
-        doubleSpaceTracker.markWithoutLiteralInsert()
-    }
-
     private func resetDoubleSpaceState() {
         doubleSpaceTracker.reset()
     }
@@ -357,8 +355,10 @@ final class InputController: UIInputViewController {
 }
 
 /// 双击空格 → 句号的状态跟踪。空格是「双语义」键：可能上屏字面空格（英文/数字页
-/// 或 RIME 未接管），也可能交给 RIME（组合期）或不落盘，故需同时记录按键时刻与
-/// 上一次是否真的上屏了字面空格，双击命中后回删该空格再插入句号。
+/// 或 RIME 未接管），也可能交给 RIME（组合期上屏候选）。双击句号只在两次都上屏
+/// 字面空格时生效：组合期第一下上屏候选后双击状态被复位，随后快速第二下按普通
+/// 空格处理（选词 + 补空格），不会误转成句号。故需同时记录按键时刻与上一次是否
+/// 真的上屏了字面空格，双击命中后回删该空格再插入句号。
 private struct DoubleSpaceTracker {
     var lastTap = Date.distantPast
     var lastTapInsertedLiteralSpace = false
@@ -373,12 +373,6 @@ private struct DoubleSpaceTracker {
     mutating func markLiteralSpaceInserted(_ now: Date = Date()) {
         lastTap = now
         lastTapInsertedLiteralSpace = true
-    }
-
-    /// 本次空格未上屏字面空格（组合期交给 RIME 或未落盘）。
-    mutating func markWithoutLiteralInsert(_ now: Date = Date()) {
-        lastTap = now
-        lastTapInsertedLiteralSpace = false
     }
 
     /// 双击命中后复位（已回删旧空格并插入句号）。

@@ -35,8 +35,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Quill 输入法
-        CFBundleShortVersionString: 1.0.0
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: 1.0.1
+        CFBundleVersion: "2"
         ITSAppUsesNonExemptEncryption: false
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
@@ -72,8 +72,8 @@ targets:
       path: QuillKeyboard/Info.plist
       properties:
         CFBundleDisplayName: Quill 输入法
-        CFBundleShortVersionString: 1.0.0
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: 1.0.1
+        CFBundleVersion: "2"
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         NSExtension:

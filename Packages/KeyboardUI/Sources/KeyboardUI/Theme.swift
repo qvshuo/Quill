@@ -54,7 +54,7 @@ public struct Theme {
     public nonisolated(unsafe) static let light = Theme(
         keyBackground: Color(hex: 0xFFFFFF),
         specialKeyBackground: Color(hex: 0xFFFFFF),
-        pressedKeyBackground: Color(hex: 0xD1D4D9),
+        pressedKeyBackground: Color(hex: 0xF0F1F3),
         keyForeground: Color(hex: 0x171717),
         specialKeyForeground: Color(hex: 0x171717),
         previewBubbleBackground: Color(hex: 0xFFFFFF),

@@ -80,6 +80,8 @@ public struct Key: View {
                 theme: theme
             )
             .contentShape(Rectangle())
+            // 显式覆盖系统默认按键动效（约 0.2s）：默认太慢产生迟滞感。
+            .animation(.easeOut(duration: 0.05), value: isPressed)
             .overlay {
                 KeyTouchTracker(
                     onPress: {
@@ -119,6 +121,8 @@ public struct Key: View {
                 theme: theme
             )
             .contentShape(Rectangle())
+            // 显式覆盖系统默认按键动效（约 0.2s）：默认太慢产生迟滞感。
+            .animation(.easeOut(duration: 0.05), value: isPressed)
             .overlay {
                 KeyTouchTracker(
                     onPress: {
@@ -226,6 +230,8 @@ private struct KeyButtonStyle: ButtonStyle {
                 theme: theme
             )
             .contentShape(Rectangle())
+            // 显式覆盖系统默认按键动效（约 0.2s）：默认太慢产生迟滞感。
+            .animation(.easeOut(duration: 0.05), value: configuration.isPressed)
             .overlay(alignment: .top) {
                 if configuration.isPressed, let previewText {
                     Text(previewText)

@@ -48,10 +48,10 @@ struct ThemeFillColorTests {
 
     @Test("深浅色主题色值基线（浅色功能键为白色；深色为半透明叠加）")
     func themeColorBaselines() {
-        // 浅色不透明：键/功能键白色，按压色比旧 #ABB1BA 更浅。
+        // 浅色不透明：键/功能键白色，按压色 #F0F1F3（接近白色）。
         #expect(Theme.light.keyBackground == Color(hex: 0xFFFFFF))
         #expect(Theme.light.specialKeyBackground == Color(hex: 0xFFFFFF))
-        #expect(Theme.light.pressedKeyBackground == Color(hex: 0xD1D4D9))
+        #expect(Theme.light.pressedKeyBackground == Color(hex: 0xF0F1F3))
         // 深色为半透明叠加（alpha < 1），经背板混合后见 darkOverlayBlendsToOriginalColors。
         #expect(rgba(Theme.dark.keyBackground).a < 1.0)
         #expect(rgba(Theme.dark.specialKeyBackground).a < 1.0)

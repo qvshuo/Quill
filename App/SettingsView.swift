@@ -159,7 +159,7 @@ LabelledField(title: "安装 ID", infoAction: {
                         Button {
                             syncAlert = SyncAlert(
                                 title: "同步",
-                                message: "通过 WebDAV 双向同步 RIME 自定义短语和朙月拼音输入方案的用户词库。"
+                                message: "通过 WebDAV 双向同步 RIME 自定义短语和朙月拼音输入方案的用户词库。\n调起键盘后，长按空格键 5 秒开始同步。"
                             )
                         } label: {
                             Image(systemName: "info.circle")
@@ -307,7 +307,7 @@ LabelledField(title: "安装 ID", infoAction: {
                     rimeContext.log("WebDAV credentials saved")
                     syncAlert = SyncAlert(
                         title: "保存成功",
-                        message: "已保存到钥匙串。\n调起键盘后，长按空格键 5 秒开始同步。"
+                        message: "已保存到钥匙串。"
                     )
                 } catch WebDAVKeychainStore.KeychainError.saveFailed(let status) {
                     let name = SecCopyErrorMessageString(status, nil) as String? ?? "未知错误"

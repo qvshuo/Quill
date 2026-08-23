@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var installationID = ""
     @State private var isTesting = false
     @State private var syncAlert: SyncAlert?
+    @State private var isConfirmingDelete = false
     @State private var didLoadCredentials = false
     @State private var lastSyncDate: Date?
     @FocusState private var focusedField: WebDAVField?
@@ -145,6 +146,13 @@ LabelledField(title: "安装 ID", infoAction: {
                     .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity)
                     .disabled(isTesting || allCredentialsEmpty)
+                    Button(role: .destructive) {
+                        isConfirmingDelete = true
+                    } label: {
+                        Text("删除凭据")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderless)
                 } header: {
                     HStack {
                         Text("同步")
@@ -212,6 +220,15 @@ LabelledField(title: "安装 ID", infoAction: {
                     message: Text(syncAlert.message),
                     dismissButton: .default(Text("好"))
                 )
+            }
+            .confirmationDialog(
+                "删除钥匙串中保存的同步凭据与最近同步时间？",
+                isPresented: $isConfirmingDelete,
+                titleVisibility: .visible
+            ) {
+                Button("删除", role: .destructive) {
+                    deleteCredentials()
+                }
             }
             .task {
                 await rimeContext.start()
@@ -319,6 +336,19 @@ LabelledField(title: "安装 ID", infoAction: {
 
     private func refreshLastSync() {
         lastSyncDate = WebDAVKeychainStore.loadLastSyncDate()
+    }
+
+    /// 清除钥匙串中的凭据与最近同步时间（卸载重装不会清钥匙串，需显式删除）。
+    private func deleteCredentials() {
+        WebDAVKeychainStore.delete()
+        WebDAVKeychainStore.deleteLastSyncDate()
+        serverURL = ""
+        username = ""
+        password = ""
+        syncPath = ""
+        installationID = ""
+        lastSyncDate = nil
+        syncAlert = SyncAlert(title: "已删除", message: "同步凭据与最近同步时间已从钥匙串清除。")
     }
 
     // MARK: - 同步完成通知

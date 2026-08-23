@@ -64,6 +64,11 @@ public enum WebDAVKeychainStore {
         delete(service: service, account: account)
     }
 
+    /// 清除最近同步时间（随凭据一并删除时使用）。
+    public static func deleteLastSyncDate() {
+        delete(service: lastSyncService, account: lastSyncAccount)
+    }
+
     /// 写入 generic password：优先共享 access group，失败回退进程默认 group。
     private static func upsert(service: String, account: String, data: Data) -> OSStatus {
         var query = baseQuery(service: service, account: account)

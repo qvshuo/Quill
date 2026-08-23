@@ -34,11 +34,8 @@ struct SettingsView: View {
             && password.isEmpty
     }
 
-    /// 「允许完全访问」由键盘扩展记录到共享默认值；无权限时写不进，只会是 true。
-    private var hasFullAccess: Bool {
-        UserDefaults(suiteName: Paths.appGroupID)?.bool(forKey: "hasFullAccess") ?? false
-    }
-
+    /// 完全访问只影响键盘扩展联网（同步）；per-app 自签基线下主 App 无通道
+    /// 感知该状态，故不展示授权提示——未授权的表象就是同步失败。
     private var isOurKeyboardEnabled: Bool {
         let target = "art.anjing.quill.keyboard"
         if let keyboards = UserDefaults.standard.array(forKey: "AppleKeyboards") as? [String] {
@@ -82,12 +79,6 @@ struct SettingsView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                    }
-                } footer: {
-                    // 完全访问标志经共享默认值传递；per-app 自签基线下无共享通道，
-                    // 读不到 ≠ 未授权，不提示以免永久误导。
-                    if Paths.appGroupContainer != nil, isOurKeyboardEnabled, !hasFullAccess {
-                        Text("请在系统设置中授权「允许完全访问」以获得完整功能体验。")
                     }
                 }
 

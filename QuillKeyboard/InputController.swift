@@ -31,7 +31,6 @@ final class InputController: UIInputViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        recordFullAccessState()
         // 只 start() 不部署：全量部署超扩展 ~77MB 内存上限会被 Jetsam 杀死，
         // 数据来自 Bundle 内预构建的 SharedSupport/build。
         rimeContext.log("Keyboard: viewDidLoad")
@@ -42,12 +41,8 @@ final class InputController: UIInputViewController {
         createKeyboardView()
     }
 
-    /// 写入共享默认值供主 App 判断是否提示授权。无完全访问权限时写不进共享容器，
-    /// 故该值只会是 true——撤销动作在扩展侧不可观测。
-    private func recordFullAccessState() {
-        UserDefaults(suiteName: Paths.appGroupID)?.set(hasFullAccess, forKey: "hasFullAccess")
-    }
-
+    /// 完全访问只影响扩展自身联网（同步）；per-app 自签基线下与主 App 无共享
+    /// 通道，状态不回传、UI 不展示，未授权的表象就是同步失败（toast 引导检查设置）。
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         refreshInputTextState()

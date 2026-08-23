@@ -1,10 +1,8 @@
 import SwiftUI
 import Models
 
-/// 候选面板（collapsed 态）：横向滚动展示全部候选，候选按钮按内容自然宽度排布
-/// （几个候选就占多宽，不强制填满一行；超出视口的通过横滑查看全部 77 个）。
-/// 右侧 chevron 独立于滚动区之外，候选不会滚到箭头下方；展开为覆盖整个键盘的
-/// 候选网格（网格由 KeyboardView 承载，参考 fcitx5-ios）。注释不渲染。
+/// 候选面板（折叠态）：横向滚动展示全部候选，自然宽度不强制填满；
+/// 右侧 chevron 独立于滚动区外。注释不渲染。
 public struct CandidatePanel: View {
     let candidates: [Candidate]
     let highlightedIndex: Int
@@ -35,8 +33,7 @@ public struct CandidatePanel: View {
             GeometryReader { geometry in
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 0) {
-                        // 候选文本每次敲键都会变，内容身份无 diff 收益；用下标做稳定身份，
-                        // 避免 `Candidate` 每次重建引入新的身份导致整组重建。
+            // 候选文本每次敲键都变，用下标做稳定身份避免整组重建。
                         ForEach(Array(candidates.enumerated()), id: \.offset) { index, candidate in
                             candidateButton(index: index, candidate: candidate)
                         }
@@ -110,8 +107,7 @@ struct CandidateChevronButton: View {
 
     var body: some View {
         Button(action: action) {
-            // 与 fcitx5-ios / iOS 惯例一致：折叠时向下箭头（提示可展开），
-            // 展开时向上箭头（提示可收起）。
+            // 折叠向下箭头、展开向上箭头（iOS 惯例）。
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 .font(.system(size: 13, weight: .medium))
                 // 深浅色模式一致的固定灰色。

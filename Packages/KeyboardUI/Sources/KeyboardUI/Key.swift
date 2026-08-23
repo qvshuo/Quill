@@ -65,11 +65,8 @@ public struct Key: View {
         .zIndex(isPressed ? 1 : 0)
     }
 
-    /// 退格支持长按连续输入：按下立即触发一次，长按 0.5s 后每 0.1s 重复。
-    ///
-    /// 用 UIKit 触摸回调（touchesBegan/touchesEnded/touchesCancelled）驱动起停：
-    /// SwiftUI 的 DragGesture 在键盘扩展里松手时 onEnded 不可靠，会导致退格
-    /// 松手后仍持续触发（尤其是被系统手势中断时不会走到 onEnded）。
+    /// 退格支持长按连打（0.5s 后每 0.1s 重复）。用 UIKit 触摸回调驱动起停：
+    /// SwiftUI DragGesture 在键盘扩展里松手不可靠，系统手势中断时不走 onEnded。
     private var repeatableKeyBody: some View {
         keyLabel
             .foregroundStyle(foregroundColor)
@@ -80,15 +77,13 @@ public struct Key: View {
                 theme: theme
             )
             .contentShape(Rectangle())
-            // 显式覆盖系统默认按键动效（约 0.2s）：默认太慢产生迟滞感。
+            // 显式覆盖系统默认按键动效（约 0.2s，太慢有迟滞感）。
             .animation(.easeOut(duration: 0.05), value: isPressed)
             .overlay {
                 KeyTouchTracker(
                     onPress: {
                         guard !isPressed else { return }
                         isPressed = true
-                        // 在 UIKit 触摸回调里直接触发震动，比 SwiftUI onChange 更可靠，
-                        // 系统手势中断时也不会丢震动。
                         KeyboardFeedback.play()
                         if repeater == nil {
                             repeater = KeyPressRepeater(
@@ -126,7 +121,7 @@ public struct Key: View {
                 theme: theme
             )
             .contentShape(Rectangle())
-            // 显式覆盖系统默认按键动效（约 0.2s）：默认太慢产生迟滞感。
+            // 显式覆盖系统默认按键动效（约 0.2s，太慢有迟滞感）。
             .animation(.easeOut(duration: 0.05), value: isPressed)
             .overlay {
                 KeyTouchTracker(
@@ -145,8 +140,7 @@ public struct Key: View {
                         }
                     },
                     onCancel: {
-                        // 系统取消触摸 / 手指滑离：不插入空格（否则来电横幅等
-                        // 中断会把空格打进文档），只复位按压视觉与长按计时。
+                        // 系统取消触摸 / 滑离：不插入空格，只复位视觉与长按计时。
                         isPressed = false
                         spaceHoldTriggeredSync = false
                         cancelSpaceHoldTimer()
@@ -217,8 +211,7 @@ public struct Key: View {
     private var foregroundColor: Color {
         switch descriptor.style {
         case .confirm:
-            // 确认键按压时底色变为统一按压色（见 Theme.fillColor），
-            // 前景同步换成 keyForeground，避免亮底亮字隐身（fcitx5-ios EnterView 同款）。
+            // 按压时底色变统一按压色，前景同步换 keyForeground 避免亮底亮字。
             return isPressed ? theme.keyForeground : .white
         case .special:
             return theme.specialKeyForeground
@@ -243,7 +236,7 @@ private struct KeyButtonStyle: ButtonStyle {
                 theme: theme
             )
             .contentShape(Rectangle())
-            // 显式覆盖系统默认按键动效（约 0.2s）：默认太慢产生迟滞感。
+            // 显式覆盖系统默认按键动效（约 0.2s，太慢有迟滞感）。
             .animation(.easeOut(duration: 0.05), value: configuration.isPressed)
             .overlay(alignment: .top) {
                 if configuration.isPressed, let previewText {
@@ -253,8 +246,7 @@ private struct KeyButtonStyle: ButtonStyle {
                         .frame(width: 48, height: 48)
                         .background(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                // 不透明背景：气泡悬浮于键帽上方，深色若用半透明
-                                // 叠加会透出键缝/面板显得「透明」（Theme token 保证）。
+                                // 不透明：半透明气泡会透出键缝显得「透明」。
                                 .fill(theme.previewBubbleBackground)
                         )
                         .shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)

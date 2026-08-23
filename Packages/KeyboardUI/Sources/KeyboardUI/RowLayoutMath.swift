@@ -3,8 +3,7 @@ import Models
 import Synchronization
 import UIKit
 
-/// 回车键文案宽度测量（`NSString.size`）的进程级缓存：同一文案每个进程最多
-/// 量一次，消灭拼音组合期间每次敲键在行排版里重复的字符串测量。
+/// 回车键文案宽度测量的进程级缓存：拼音组合期间每次敲键的行排版不再重复测量。
 enum ReturnLabelWidth {
     private static let cache = Mutex<[String: CGFloat]>([:])
 
@@ -36,7 +35,7 @@ struct RowLayout {
     }
 }
 
-/// 行排版输入参数：几何常量随主题变化、与具体行无关，一起传入避免 8 个散参数。
+/// 行排版输入参数：随主题变化的几何常量，与具体行无关。
 struct RowLayoutParameters {
     let keys: [KeyDescriptor]
     let totalWidth: CGFloat

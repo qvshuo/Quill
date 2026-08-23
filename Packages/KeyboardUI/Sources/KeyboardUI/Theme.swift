@@ -1,13 +1,8 @@
 import SwiftUI
 
-/// 键盘主题 token，近似 iOS 26.6 简体拼音键盘的视觉参数。
-/// 键帽为纯色填充，无阴影、描边、渐变等任何效果，边缘绝对清晰。
-/// 键盘面板背景保持透明，由系统键盘容器统一绘制（fcitx5-ios 风格）。
-/// 浅色为不透明色；深色采用 fcitx5-ios 同款「半透明叠加」——键帽色为半透明白/灰，
-/// 经透明面板后的系统深色键盘背板（≈ #2B2B2B）混合出最终观感，混合结果与原不透明
-/// 深色基本一致（见 `Theme.dark` 注释）。深浅色由 `@Environment(\.colorScheme)` 自动跟随。
-/// 按压效果为统一按压色（浅色变暗 / 深色变亮），
-/// 由 `fillColor(style:isPressed:)` 推导，仅设一个按压色 token。
+/// 键盘主题 token，近似 iOS 26 简体拼音键盘视觉。键帽纯色无任何效果，面板透明
+/// 由系统容器绘制；浅色不透明，深色为半透明叠加（经 ≈#2B2B2B 系统背板混合），
+/// 深浅色由 `@Environment(\.colorScheme)` 自动跟随。
 public struct Theme {
     public let keyBackground: Color
     public let specialKeyBackground: Color
@@ -15,8 +10,7 @@ public struct Theme {
     public let pressedKeyBackground: Color
     public let keyForeground: Color
     public let specialKeyForeground: Color
-    /// 字符键按压预览气泡背景：必须是**不透明**色（气泡悬浮于键帽之上，
-    /// 背后是透明面板/键缝，深色若沿用半透明叠加会透出背板显得「透明」）。
+    /// 预览气泡背景：必须不透明，否则深色下透出键缝显得「透明」。
     public let previewBubbleBackground: Color
     public let keyCornerRadius: CGFloat
     public let keyHeight: CGFloat
@@ -63,25 +57,19 @@ public struct Theme {
     )
 
     public nonisolated(unsafe) static let dark = Theme(
-        // 深色采用 fcitx5-ios 同款「半透明叠加」：这些半透明白/灰经系统深色键盘背板
-        // （≈ #2B2B2B）混合后 ≈ 原不透明色——keyBackground 白@0.21→#585858（原 #575858）、
-        // specialKeyBackground 灰#858585@0.17→#3A3A3A（原 #3A3A3C）、
-        // pressedKeyBackground 白@0.30→#6B6B6B（原 #6A6A6C）、
-        // candidateSelectionFill 白@0.22→#5A5A5A（原 #595858）。与系统背板联动更自然。
+        // 半透明叠加：经系统深色背板（≈#2B2B2B）混合后 ≈ 原不透明色
+        // （keyBackground→#585858、special→#3A3A3A、pressed→#6B6B6B、selection→#5A5A5A）。
         keyBackground: Color.white.opacity(0.21),
         specialKeyBackground: Color(red: 133 / 255, green: 133 / 255, blue: 133 / 255).opacity(0.17),
         pressedKeyBackground: Color.white.opacity(0.30),
         keyForeground: Color(hex: 0xFFFFFF),
         specialKeyForeground: Color(hex: 0xFFFFFF),
-        // 不透明：等价深色键帽白@0.21 经 #2B2B2B 背板混合后的观感（#585858），
-        // 悬浮气泡不透明才不会被背板透出。
         previewBubbleBackground: Color(hex: 0x585858),
         candidateSelectionFill: Color.white.opacity(0.22),
         geometry: base
     )
 
-    // 主题共享的几何/字体 token：深浅色仅颜色不同，几何一致，
-    // 收敛为单一来源，避免两处维护发散。
+    // 深浅色共享的几何/字体 token，单一来源。
     private static let base = ThemeGeometry(
         keyCornerRadius: 8,
         keyHeight: 45,
@@ -155,9 +143,7 @@ private struct ThemeGeometry {
 }
 
 public extension View {
-    /// 键帽背景：纯色填充，无阴影、描边、渐变等任何效果，边缘绝对清晰。
-    /// 浅色不透明、深色半透明叠加（经系统背板混合，见 `Theme.dark`）。
-    /// 按压时切换到统一按压底色（浅色变暗 / 深色变亮，见 `Theme.fillColor`）。
+    /// 键帽背景：纯色圆角填充，按压切换到统一按压底色。
     @ViewBuilder
     func keyBackground(
         isPressed: Bool,
@@ -175,9 +161,7 @@ public extension Theme {
     /// 确认（回车）键底色：单一常量，与 fcitx5-ios `highlightBackground` 一致。
     static let confirmKeyColor = Color(hex: 0x007AFF)
 
-    /// 键帽填充色（含按压态）：按压统一使用 `pressedKeyBackground`
-    /// （浅色变暗、深色变亮，原生同款；所有键型共用）。
-    /// 纯函数，供视图与单元测试共用。
+    /// 键帽填充色（含按压态）：按压统一 pressedKeyBackground。纯函数供测试共用。
     func fillColor(style: KeyStyle, isPressed: Bool) -> Color {
         switch style {
         case .confirm:

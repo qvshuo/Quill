@@ -6,9 +6,7 @@ extension RimeContext {
     // MARK: - Lifecycle
 
     /// 主 App 与键盘扩展通用的启动入口：setup → initialize，不部署。
-    /// 每个进程只应调用一次（键盘扩展在 `viewDidLoad`，主 App 在设置页 `.task`）。
-    /// `@MainActor`：阻塞性的 librime 初始化在后台任务里完成，会话创建与可观测
-    /// 状态发布回到主线程执行（`@Observable` 状态只在主线程写）。
+    /// 阻塞性初始化在后台任务完成，会话创建与可观测状态发布回主线程。
     @MainActor
     public func start() async {
         redirectStderrToLogFile()
@@ -25,9 +23,7 @@ extension RimeContext {
                 try self.setupOnce()
                 self.setReady(true)
             }.value
-            // 预热 session：把 session 创建（加载方案、打开用户词库）从第一次按键
-            // 提前到启动阶段，避免第一次点击时的明显迟滞。detached 结束后回到主线程
-            // 再创建，保证可观测状态只在主线程写。
+            // 预热 session 避免首次按键迟滞；回到主线程创建，保证可观测状态只在主线程写。
             createSessionIfNeeded()
             self.log("RIME ready")
         } catch {
@@ -125,10 +121,8 @@ extension RimeContext {
         NSLog("Quill RIME setup shared=%@ user=%@", shared as NSString, user as NSString)
         rimeAPI.setup!(&traits)
         rimeAPI.initialize!(&traits)
-        // initialize 只加载 kDefaultModules（core/dict/gears），部署任务
-        // （installation_update / backup_config_files / user_dict_sync）由 levers
-        // 模块注册，须用 deployer_initialize 显式加载（幂等，会跳过已加载模块）。
-        // 否则 RimeSyncUserData 调度不到任何任务，直接返回 false（导出报「同步失败」）。
+        // initialize 只加载 kDefaultModules；部署任务由 levers 模块注册，
+        // 须显式加载，否则 RimeSyncUserData 无任务可调度、直接失败。
         rimeAPI.deployer_initialize!(&traits)
 
         isSetup = true

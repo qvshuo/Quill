@@ -21,8 +21,7 @@ final class InputController: UIInputViewController {
     /// 手动同步（长按空格键 5 秒触发）是否进行中，防止重复触发。
     private var isSyncing = false
 
-    /// `.completed / .failed` toast 的自动收起任务。收起时长由控制器掌握
-    /// （模型 `SyncToast` 不承载计时语义），新一次同步会取消上一次的收起。
+    /// `.completed / .failed` toast 的自动收起任务。
     private var toastDismissTask: Task<Void, Never>?
 
     deinit {
@@ -33,22 +32,18 @@ final class InputController: UIInputViewController {
         super.viewDidLoad()
 
         recordFullAccessState()
-        // 键盘扩展只 start()：全量部署内存远超 ~77MB 上限会被 Jetsam 杀死，数据来自
-        // Bundle 内预构建的 SharedSupport/build。beginStart 串行化保证不会重复触发。
+        // 只 start() 不部署：全量部署超扩展 ~77MB 内存上限会被 Jetsam 杀死，
+        // 数据来自 Bundle 内预构建的 SharedSupport/build。
         rimeContext.log("Keyboard: viewDidLoad")
         Task {
             await rimeContext.start()
         }
 
         createKeyboardView()
-        // 在 viewDidLoad 尽早预热震动引擎，减少首次按键反馈的迟滞。
-        KeyboardFeedback.prepare()
     }
 
-    /// 把「允许完全访问」状态写入共享 App Group 默认值，供主 App 判断是否提示授权。
-    /// 无完全访问权限时键盘没有共享容器写权限（写入静默失败），因此该键实际只可能
-    /// 被写成 true；用户关闭完全访问后扩展无法再向共享容器写入 false——撤销动作
-    /// 在扩展侧不可观测，只能等权限恢复后重新写回 true。
+    /// 写入共享默认值供主 App 判断是否提示授权。无完全访问权限时写不进共享容器，
+    /// 故该值只会是 true——撤销动作在扩展侧不可观测。
     private func recordFullAccessState() {
         UserDefaults(suiteName: Paths.appGroupID)?.set(hasFullAccess, forKey: "hasFullAccess")
     }
@@ -59,15 +54,27 @@ final class InputController: UIInputViewController {
         refreshKeyboardContext()
     }
 
+    /// 切换深浅色后首次调起时真实 trait 未传播到位，首帧会闪默认浅色：
+    /// 先钉住系统风格（层级外拿不到宿主风格），真实风格抵达后解除。
+    private func pinInterfaceStyle() {
+        hostingController?.view.overrideUserInterfaceStyle =
+            UIScreen.main.traitCollection.userInterfaceStyle
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle {
+            hostingController?.view.overrideUserInterfaceStyle = .unspecified
+        }
+    }
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // 首次出现时同步键盘类型与输入框文本状态（textDidChange 不一定先于 viewWillAppear 触发）。
         refreshInputTextState()
         refreshKeyboardContext()
-        // fcitx5-ios 同款：viewDidLoad 挂载会造成巨大布局位移，须在 viewWillAppear 挂载。
-        // 高度由 SwiftUI .frame(height:) 内在尺寸决定，无需 preferredContentSize。
-        // 幂等挂载：viewWillAppear 可多次触发，重复 addChild / activate 约束会累积。
+        // viewDidLoad 挂载会有巨大布局位移，须在此挂载；幂等防重复 addChild / 约束累积。
         guard let hostingController, hostingController.view.superview == nil else { return }
+        pinInterfaceStyle()
         addChild(hostingController)
         view.addSubview(hostingController.view)
         NSLayoutConstraint.activate([
@@ -97,8 +104,7 @@ final class InputController: UIInputViewController {
         hostingController?.rootView = makeKeyboardView()
     }
 
-    /// 判断目标输入框是否已有文本（用于右下角回车键高亮）。
-    /// 优先使用 `UIKeyInput.hasText`；部分字段的 document context 不可靠，再用上下文兜底。
+    /// 判断输入框是否已有文本（回车键高亮）。部分字段 hasText 不可靠，用上下文兜底。
     private func hasText(in proxy: UITextDocumentProxy) -> Bool {
         if proxy.hasText { return true }
         return !(proxy.documentContextBeforeInput?.isEmpty ?? true)
@@ -106,7 +112,6 @@ final class InputController: UIInputViewController {
             || !(proxy.selectedText?.isEmpty ?? true)
     }
 
-    /// 字段聚焦/切换时以 proxy 为准刷新「输入框有文本」状态。
     private func refreshInputTextState() {
         inputState.hasInputText = hasText(in: textDocumentProxy)
     }
@@ -114,11 +119,11 @@ final class InputController: UIInputViewController {
     private func createKeyboardView() {
         let hostingController = UIHostingController(rootView: makeKeyboardView())
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
-        // 参考 fcitx5-ios：UIKit 层完全透明，面板背景由系统键盘容器统一绘制。
-        // 深浅色由 SwiftUI @Environment(\.colorScheme) 自动跟随系统（fcitx5-ios 同款）。
+        // UIKit 层全透明，面板背景由系统键盘容器绘制。
         hostingController.view.backgroundColor = .clear
         view.backgroundColor = .clear
         self.hostingController = hostingController
+        pinInterfaceStyle()
     }
 
     private func makeKeyboardView() -> KeyboardView {
@@ -151,7 +156,7 @@ final class InputController: UIInputViewController {
             if text == " " {
                 if !handleDoubleSpaceAsPeriod(".") {
                     insertToProxy(" ")
-                    markLiteralSpaceInserted()
+                    doubleSpaceTracker.markLiteralSpaceInserted()
                 }
                 return
             }
@@ -174,22 +179,21 @@ final class InputController: UIInputViewController {
                 }
             }
         case .space:
-            // 空格不消耗一次性大写状态（在英文模式下保持首字母大写）。
-            // 组合期间空格交 RIME 上屏；双击句号转换只在两次都上屏字面空格时生效
-            // （组合期第一下是「选词」，随后快速第二下应是补一个空格，而非变成句号）。
+            // 空格双语义：组合期交 RIME 选词并复位双击状态；
+            // 双击句号只在两次都上屏字面空格时生效。
             if rimeContext.preedit.isEmpty, handleDoubleSpaceAsPeriod("。") {
                 return
             }
             // 无拼音 preedit 时跳过 RIME，直接上屏字面空格。
             if rimeContext.preedit.isEmpty {
                 insertToProxy(" ")
-                markLiteralSpaceInserted()
+                doubleSpaceTracker.markLiteralSpaceInserted()
                 return
             }
             handled = rimeContext.processKey(XK_space)
             if !handled {
                 insertToProxy(" ")
-                markLiteralSpaceInserted()
+                doubleSpaceTracker.markLiteralSpaceInserted()
             } else {
                 // 组合期上屏候选：复位双击状态，让紧随的第二次空格按普通空格处理。
                 resetDoubleSpaceState()
@@ -233,32 +237,25 @@ final class InputController: UIInputViewController {
         }
     }
 
-    /// 长按空格键 5 秒触发的手动 WebDAV 同步：
-    /// 同步中 → 销毁并重启 RIME 会话（让新词生效）→ 同步完成（toast 由控制器收起）。
+    /// 长按空格触发的手动同步；完成后按需重建会话让合并的新词生效。
     private func startManualSync() {
         guard !isSyncing else { return }
-        // 有未提交的拼音组合时放弃同步：打断组合会丢 preedit / 候选，
-        // 且同步完成后重建会话本就是按 preedit 空判断的，这里直接不开始。
+        // 有组合时不开始：打断会丢 preedit / 候选。
         guard rimeContext.preedit.isEmpty else { return }
         isSyncing = true
         toastDismissTask?.cancel()
         inputState.toast = .started
         rimeContext.log("Keyboard: manual WebDAV sync (space long-press)")
         let rime = rimeContext
-        // 弱引用持有：同步可能耗时（最坏 15s 超时 + 后台僵尸同步跑完），键盘被收起时
-        // 不应把控制器 / 输入状态一直保留到任务结束。
+        // 弱引用：键盘收起时不应把控制器保留到同步结束（最坏 15s+）。
         Task { [weak self] in
             let success = await WebDAVSync.syncWithTimeout(.seconds(15))
             rime.log("Keyboard: manual WebDAV sync done success=\(success)")
             await MainActor.run {
                 guard let self else { return }
-                // 销毁并重启 RIME：让合并后的用户词库 / custom_phrase 生效。
-                // 有未提交的组合时保留会话，避免丢 preedit。
                 if self.rimeContext.preedit.isEmpty {
-                    // 在同步专用串行队列上重建会话：超时后后台僵尸同步仍可能持引擎锁跑
-                    // syncUserData，主线程直接调用会阻塞到它结束（键盘假死）。
-                    // 直接捕获 context 单例，不经过 self——否则闭包会把控制器强持有
-                    // 到僵尸同步结束（最坏 15s+）。
+                    // 在同步专用串行队列重建：僵尸同步可能持引擎锁，主线程调用会阻塞到它结束。
+                    // 捕获 context 单例而非 self，避免闭包强持有控制器。
                     let rimeForRecreate = self.rimeContext
                     WebDAVSync.runAfterSync {
                         rimeForRecreate.recreateSession()
@@ -267,14 +264,13 @@ final class InputController: UIInputViewController {
                 let toast: SyncToast = success ? .completed : .failed
                 self.inputState.toast = toast
                 self.isSyncing = false
-                self.scheduleToastDismissal(for: toast)
+                self.scheduleToastDismissal(delay: toast == .failed ? 4.0 : 2.5)
             }
         }
     }
 
     /// `.completed / .failed` 停留片刻后自动收起；`started` 由同步结束直接替换。
-    private func scheduleToastDismissal(for toast: SyncToast) {
-        let delay: TimeInterval = toast == .failed ? 4.0 : 2.5
+    private func scheduleToastDismissal(delay: TimeInterval) {
         toastDismissTask?.cancel()
         let state = inputState
         let task = Task { [weak state] in
@@ -314,25 +310,14 @@ final class InputController: UIInputViewController {
         return true
     }
 
-    private func markLiteralSpaceInserted() {
-        doubleSpaceTracker.markLiteralSpaceInserted()
-    }
-
-    /// 本键盘向输入框上屏文本，并标记输入框已有文本。
+    /// 本键盘上屏了非空文本，标记输入框已有文本（回车键高亮）。
     private func insertToProxy(_ text: String) {
         textDocumentProxy.insertText(text)
-        markInputTextInserted()
-    }
-
-    /// 本键盘向输入框上屏了非空文本后，标记输入框已有文本。
-    private func markInputTextInserted() {
         inputState.hasInputText = true
     }
 
-    /// 上屏最终文本（候选词 / preedit 原文）。组合期间宿主字段里的 marked 区是
-    /// 原始拼音，直接 `unmarkText()` 会把拼音固化进文档、随后的插入变成「拼音+候选」
-    /// 拼接（部分 host 不替换 marked range）。改为用 setMarkedText 以最终文本
-    /// 覆盖 marked 区后再固化；无 marked 区时按普通插入处理。
+    /// 上屏最终文本。组合期 marked 区是原始拼音，直接 `unmarkText()` 会把拼音
+    /// 固化进文档再拼上候选；改为以最终文本覆盖 marked 区后固化。
     private func commitReplacingMarkedText(_ text: String) {
         if displayedPreedit.isEmpty {
             insertToProxy(text)
@@ -340,7 +325,7 @@ final class InputController: UIInputViewController {
             let end = text.utf16.count
             textDocumentProxy.setMarkedText(text, selectedRange: NSRange(location: end, length: 0))
             textDocumentProxy.unmarkText()
-            markInputTextInserted()
+            inputState.hasInputText = true
         }
     }
 
@@ -348,9 +333,8 @@ final class InputController: UIInputViewController {
         doubleSpaceTracker.reset()
     }
 
-    /// 把 RIME 的 commit / preedit 同步进宿主输入框（marked 区维护）。
-    /// 清空组合必须 `setMarkedText("")` + `unmarkText()`：裸 `unmarkText()` 会把
-    /// 最后一个 marked 字母固化进文档，表现为需要两次退格。
+    /// 把 RIME 的 commit / preedit 同步进宿主输入框。清空组合必须
+    /// `setMarkedText("")` + `unmarkText()`：裸 `unmarkText()` 会固化最后一个字母。
     private func syncText() {
         if let commit = rimeContext.pollCommit(), !commit.isEmpty {
             commitReplacingMarkedText(commit)
@@ -371,11 +355,8 @@ final class InputController: UIInputViewController {
     }
 }
 
-/// 双击空格 → 句号的状态跟踪。空格是「双语义」键：可能上屏字面空格（英文/数字页
-/// 或 RIME 未接管），也可能交给 RIME（组合期上屏候选）。双击句号只在两次都上屏
-/// 字面空格时生效：组合期第一下上屏候选后双击状态被复位，随后快速第二下按普通
-/// 空格处理（选词 + 补空格），不会误转成句号。故需同时记录按键时刻与上一次是否
-/// 真的上屏了字面空格，双击命中后回删该空格再插入句号。
+/// 双击空格 → 句号的状态跟踪。双击句号只在两次都上屏字面空格时生效
+/// （组合期第一下是选词、会复位状态），故除时刻外还需记录上次是否字面空格。
 private struct DoubleSpaceTracker {
     var lastTap = Date.distantPast
     var lastTapInsertedLiteralSpace = false

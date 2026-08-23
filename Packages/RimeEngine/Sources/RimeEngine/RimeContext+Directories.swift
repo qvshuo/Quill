@@ -4,9 +4,8 @@ import Synchronization
 extension RimeContext {
     // MARK: - Sync (安装信息 / 用户词典同步)
 
-    /// 本设备在同步目录里的安装 ID，即 `sync/<installation_id>/` 子目录名。
-    /// 默认 "Quill"；同步层（Sync）在开始同步前按保存的凭据设置实际值。
-    /// 引擎层保持后端无关，不读取网络凭据。主线程与同步后台队列都可能读写，用锁保护。
+    /// 本设备的安装 ID，即 `sync/<installation_id>/` 子目录名。引擎层后端无关，
+    /// 由同步层按保存的凭据设置。多处读写，用锁保护。
     private static let installationIDStorage = Mutex<String>("Quill")
     public static var installationID: String {
         get { installationIDStorage.withLock { $0 } }
@@ -17,9 +16,7 @@ extension RimeContext {
     /// 同步期间 installation.yaml 的 sync_dir 会被改写为暂存目录，本目录仅作启动时默认值。
     // MARK: - Sync (暂存目录覆盖)
 
-    /// 同步期间的暂存目录覆盖。设置后 `sync_dir` 与导出目录都指向暂存目录
-    /// （每次同步清空重建，不保留本地 `Rime_sync/` 缓存）。同步结束后应清空。
-    /// 主 App 与键盘扩展、以及同步后台任务都会读写，用锁保护。
+    /// 同步期间的暂存目录覆盖；结束后清空。多处读写，用锁保护。
     private static let stagingDirectoryOverrideStorage = Mutex<URL?>(nil)
     private static var stagingDirectoryOverride: URL? {
         get { stagingDirectoryOverrideStorage.withLock { $0 } }
@@ -40,11 +37,7 @@ extension RimeContext {
         Self.stagingDirectoryOverride = nil
     }
 
-    /// 确保 `installation.yaml` 里的 `installation_id` 为当前安装 ID，并开启配置备份
-    /// （`backup_config_files`，否则 librime 不会把 `*.custom.yaml` / `custom_phrase.txt`
-    /// 备份进同步目录）。
-    /// `sync_dir` 指向同步暂存目录（覆盖生效时），否则为本地默认 `user_data_dir/sync`
-    /// （实际同步只经暂存覆盖，本地目录仅为满足 librime installation.yaml 合法）。
+    /// 确保 installation.yaml 的 installation_id / backup_config_files / sync_dir 就绪。
     func ensureInstallationInfo() {
         guard let dir = Paths.userDataDirectory else { return }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

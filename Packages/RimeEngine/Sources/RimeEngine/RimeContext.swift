@@ -3,17 +3,11 @@ import Observation
 import Models
 @preconcurrency import RimeEngineC
 
-/// 进程内单例 RIME 上下文。桥接对齐 Squirrel：Swift 直接持有 `RimeApi_stdbool`
-/// 调用 librime C API，无 ObjC 包装层。
+/// 进程内单例 RIME 上下文：Swift 直接持有 `RimeApi_stdbool` 调用 librime C API。
 ///
-/// 生命周期：每个进程只 `start()` 一次（键盘扩展 `viewDidLoad` / 主 App 设置页
-/// `.task`），start = setup → initialize，不做 deploy（数据预构建，见 AGENTS.md
-/// 「No deploy path」）。setup 完成前 `processKey` 丢键（`isReady` 守卫）。
-/// glog 每进程只允许 `setup()` 一次，`isSetup` 仅作兜底。
-///
-/// 方法按职责拆在 `RimeContext+*.swift` extension 文件中；本文件只保留类声明与
-/// 共享内部状态。内部存储属性为 `internal`（模块内），供 extension 文件访问。
-/// `librime` 非线程安全：所有 C API 调用都持 `lock`（NSRecursiveLock）执行。
+/// 生命周期：每进程只 `start()` 一次（setup → initialize，不 deploy），setup 完成
+/// 前 `processKey` 丢键。方法按职责拆在 `RimeContext+*.swift`；本文件只保留声明
+/// 与共享内部状态。librime 非线程安全：所有 C API 调用都持 `lock` 执行。
 @Observable
 public final class RimeContext: @unchecked Sendable {
     public static let shared = RimeContext()
@@ -40,9 +34,8 @@ public final class RimeContext: @unchecked Sendable {
     public internal(set) var candidates: [Candidate] = []
     public internal(set) var preedit: String = ""
     public internal(set) var highlightedCandidateIndex: Int = 0
-    /// 一次性 commit 缓冲：只经 `pollCommit()` 消费，无 UI 观察者。
-    /// 标记 `@ObservationIgnored`：它在持锁下由任意线程（含同步队列的
-    /// `recreateSession`）写入，不能走「只在主线程写」的可观察状态通道。
+    /// 一次性 commit 缓冲：只经 `pollCommit()` 消费。`@ObservationIgnored`：
+    /// 持锁下由任意线程写入，不走「只在主线程写」的可观察通道。
     @ObservationIgnored public internal(set) var commitText: String = ""
 
     let logFileName = "quill.log"

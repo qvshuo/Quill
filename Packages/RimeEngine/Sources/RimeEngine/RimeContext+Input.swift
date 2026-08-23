@@ -14,9 +14,7 @@ extension RimeContext {
         guard session != 0, rimeAPI.find_session!(session) else { return false }
 
         let handled = rimeAPI.process_key!(session, keyCode, modifier)
-        // 未命中键（如英文直通、未定义键）不会改变 RIME 上下文/commit，
-        // 跳过 refreshContext 免去每次 get_commit + get_context + [Candidate] 重建。
-        // `true` 或产生 commit 的键（librime 对它们返回 handled）照常同步状态。
+        // 未命中键不改变 RIME 上下文，跳过 refreshContext 省去热路径开销。
         if handled {
             refreshContext()
         }
@@ -36,10 +34,8 @@ extension RimeContext {
         lock.lock()
         defer { lock.unlock() }
         guard isReady, session != 0 else { return }
-        // 全局索引选择：展开网格里可选中任何候选（不限于当前页）。
-        // 注意：本键盘无前后翻页，librime 当前页恒为 0，故候选数组下标 ==
-        // librime 全局下标，`select_candidate`（全局）与页内下标恰好一致。
-        // 若将来引入翻页，页内选择须改用 `select_candidate_on_current_page`。
+        // 全局索引选择：本键盘无翻页，librime 当前页恒为 0，数组下标即全局下标。
+        // 若将来引入翻页须改用 select_candidate_on_current_page。
         // 选择失败（下标越界等）会表现为「点了候选没反应」，留日志便于排查。
         if !rimeAPI.select_candidate!(session, max(0, index)) {
             log("selectCandidate(\(index)) failed")
@@ -99,8 +95,8 @@ extension RimeContext {
         return text.isEmpty ? nil : text
     }
 
-    /// 同步 RIME 状态到可观测属性。commit 是单次语义，必须先于 context 消费。
-    /// `loadAll == false`（按键热路径默认）时只取 RIME 当前页；展开网格时传 `true` 补满 77。
+    /// 同步 RIME 状态到可观测属性。commit 单次语义，先于 context 消费；
+    /// `loadAll` 仅展开网格时补满 77 候选，热路径只取当前页。
     func refreshContext(loadAll: Bool = false) {
         guard isReady, session != 0, rimeAPI.find_session!(session) else {
             setContext(candidates: [], preedit: "", highlighted: 0)

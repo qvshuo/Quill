@@ -10,8 +10,7 @@ enum CandidateGridLayout {
     private static let widthCache = Mutex<[String: CGFloat]>([:])
     private static let widthCacheLimit = 512
 
-    /// 候选格横向内边距（每侧 10pt）。行宽测量必须与 `CandidatePanel` 单元格的
-    /// `.padding(.horizontal, 10)` 一致，否则排出的行数偏多、格子互相挤压。
+    /// 行宽测量必须与 `CandidatePanel` 单元格的 `.padding(.horizontal, 10)` 一致。
     private static let cellHPadding: CGFloat = 10
 
     /// 候选文本的渲染宽度（用与 `candidateFont` 一致的 `UIFont` 测量）。
@@ -78,11 +77,9 @@ enum CandidateGridLayout {
         let minCellWidth: CGFloat
     }
 
-    /// 一次性算好展开网格排版（行数/行首/首行对齐/最小格宽），供网格视图直接渲染。
-    /// 首行与折叠候选栏对齐：首行中心 = barHeight/2，顶边距按首行「实际」行高
-    /// （选中 pill 是 `selectionHeight`、普通格是 `cellHeight`）计算，用固定值会把
-    /// 首行压偏。`minCellWidth` 比 innerWidth/6 略小，保证 6 个最小格恰好排满
-    /// （否则浮点累加会让 6×minWidth 差一丝超过 innerWidth，各行都只排 5 格）。
+    /// 一次性算好展开网格排版。首行中心对齐折叠候选栏（barHeight/2），顶边距按
+    /// 首行实际行高（选中 pill 是 selectionHeight、普通格是 cellHeight）计算；
+    /// minCellWidth 比 innerWidth/6 略小，保证 6 个最小格恰好排满（浮点容差）。
     static func measure(
         candidateTexts: [String],
         highlightedIndex: Int,

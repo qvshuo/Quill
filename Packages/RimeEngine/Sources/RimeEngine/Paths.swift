@@ -1,13 +1,9 @@
 import Foundation
 
-/// 文件系统路径的唯一来源：主 App、键盘扩展、同步层与 RIME 引擎统一从这里
-/// 取目录，避免各处散落的 App Group ID / Bundle 探测 / 目录拼接逻辑。
-///
-/// 设计要点：
-/// - App Group 可用时（主 App 与键盘扩展共享容器），用户数据、日志都落在
-///   App Group 容器下；否则回退到各自私有的 Application Support / Documents。
-/// - `SharedSupport` 是预构建 RIME 数据（`build/*.bin`），部署时复制进主 App
-///   bundle；键盘扩展的 `Bundle.main` 是 .appex，需向上回溯宿主 App bundle。
+/// 文件系统路径唯一来源：主 App、键盘扩展、同步层统一从这里取目录。
+/// App Group 可用时用户数据/日志落共享容器，否则各自私有目录回退；
+/// SharedSupport 是预构建 RIME 数据，键盘扩展的 Bundle.main 是 .appex，
+/// 需向上回溯宿主 App bundle。
 public enum Paths {
     public static let appGroupID = "group.art.anjing.quill"
 

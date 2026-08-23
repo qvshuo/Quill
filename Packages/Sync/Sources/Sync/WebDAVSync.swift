@@ -2,16 +2,11 @@ import Foundation
 import RimeEngine
 import Synchronization
 
-/// WebDAV 同步编排（Squirrel 逻辑）：
-/// 1. 清空临时暂存目录
-/// 2. 从 WebDAV `Rime_Sync/` 下载所有设备子目录的 `luna_pinyin_extended.userdb.txt` 与 `custom_phrase.txt`
-/// 3. 把 `installation.yaml` 的 sync_dir 指到暂存目录
-/// 4. 调 librime `RimeSyncUserData`：导出本机词典到 `暂存/<本机ID>/`，并把暂存下所有设备合并进本地词典
-/// 5. 把 `暂存/<本机ID>/` 上传回 WebDAV `Rime_Sync/<本机ID>/`
-/// 6. 完成后发 Darwin 通知（主 App 可监听刷新状态）
+/// WebDAV 同步编排（Squirrel 逻辑）：清空暂存目录 → 下载各设备目录的相关文件 →
+/// 把 installation.yaml 的 sync_dir 指到暂存目录 → `RimeSyncUserData` 导出+合并 →
+/// 上传本机导出目录 → 发完成通知。
 ///
-/// 只同步 `luna_pinyin_extended.userdb.txt` 与 `custom_phrase.txt` 两个文件，其余一律不处理。
-/// 暂存目录每次清空、用完即弃，不保留本地 `Rime_sync/` 缓存（完全以 WebDAV 为准）。
+/// 只同步用户词库与自定义短语两个文件；暂存目录用完即弃，不留本地缓存。
 public enum WebDAVSync {
     /// Darwin 通知名：键盘扩展同步完成，主 App 监听后刷新状态。
     public static let completionNotificationName = "com.anjing.quill.webdav.sync.completed"
@@ -29,13 +24,11 @@ public enum WebDAVSync {
             .appendingPathComponent("RimeSyncStage", isDirectory: true)
     }
 
-    /// librime 同步（`RimeSyncUserData` + `join_maintenance_thread`）是阻塞式调用，
-    /// 不能在 Swift 协作线程池上等待（会饿死同一执行器的其他任务）。放到专用串行队列。
+    /// librime 同步是阻塞调用，不能在 Swift 协作线程池上等待，放专用串行队列。
     private static let librimeSyncQueue = DispatchQueue(label: "art.anjing.quill.librime.sync")
 
-    /// 在 librime 同步专用串行队列上执行一段引擎操作（如同步后的会话重建）。
-    /// 与在途的 `syncUserData` 按 FIFO 顺序执行，且不阻塞主线程：同步超时后后台
-    /// 「僵尸同步」仍可能持引擎锁跑 `syncUserData`，主线程直接调用会阻塞到它结束。
+    /// 在 librime 同步专用串行队列上执行引擎操作（如同步后的会话重建）。
+    /// 与在途同步 FIFO 串行；僵尸同步持引擎锁时主线程直接调用会阻塞键盘。
     public static func runAfterSync(_ block: @escaping @Sendable () -> Void) {
         librimeSyncQueue.async(execute: block)
     }
@@ -56,15 +49,12 @@ public enum WebDAVSync {
         }
     }
 
-    /// 只同步这两个文件：`luna_pinyin_extended.userdb.txt`（用户词库）和
-    /// `custom_phrase.txt`（自定义短语）。其他文件一律不同步。
+    /// 只同步这两个文件：用户词库与自定义短语。
     private static func relevantFile(_ name: String) -> Bool {
         name == "luna_pinyin_extended.userdb.txt" || name == "custom_phrase.txt"
     }
 
-    /// 单一同步在途标记。超时竞速里「输家」不会被取消，可能仍在后台跑完；
-    /// 若此时用户再次触发同步，两次同步会并发清空/读写同一暂存目录与用户词库。
-    /// 此标记让并发触发直接跳过，避免两个同步任务交错。
+    /// 单一在途标记：超时输家不会被取消，并发触发会交错读写同一暂存目录与词库。
     private static let inFlight = Mutex(false)
 
     /// 完整同步一次，返回是否成功。进度经 `RimeContext.log()` 记录。
@@ -134,9 +124,8 @@ public enum WebDAVSync {
                 }
             }
 
-            // 把其他设备目录里的 custom_phrase.txt 复制进本地用户目录：
-            // librime 同步只合并 *.userdb.txt；custom_phrase.txt 需手动覆盖到
-            // 用户目录，下一次会话创建时 StableDb 才会读它。
+            // 把其他设备的 custom_phrase.txt 覆盖进本地用户目录：
+            // librime 只合并 *.userdb.txt，.txt 需手动应用、下次会话生效。
             if let userDir = Paths.userDataDirectory {
                 try? FileManager.default.createDirectory(at: userDir, withIntermediateDirectories: true)
                 for device in devices where device != RimeContext.installationID {
@@ -192,12 +181,8 @@ public enum WebDAVSync {
         }
     }
 
-    /// 带超时的同步。到 `timeout` 仍未结束即返回 `false`。
-    ///
-    /// 实现用「竞速」而非「取消」：`runLibrimeSync` 在专用阻塞队列上等待 librime，
-    /// 中途取消任务会让 `withCheckedThrowingContinuation` 与队列回调出现
-    /// 双 resume 崩溃。这里两个子任务互不取消，先到者胜——超时后同步在后台
-    /// 继续跑完（结果被丢弃，用户目录/字典合并无害），键盘 UI 不被阻塞。
+    /// 带超时的同步，超时返回 `false`。用「竞速」而非「取消」：中途取消会让
+    /// `withCheckedThrowingContinuation` 与队列回调双 resume；输家在后台跑完即被丢弃。
     @discardableResult
     public static func syncWithTimeout(_ timeout: Duration = .seconds(15)) async -> Bool {
         await withCheckedContinuation { continuation in
@@ -233,10 +218,7 @@ public enum WebDAVSync {
         }
     }
 
-    /// 发 Darwin 通知，主 App 可监听后刷新状态。
-    /// 注意：Darwin 通知不携带 payload，观察者无法据此区分同步成功/失败；
-    /// 成功与否应以 `WebDAVKeychainStore.loadLastSyncDate()` 或本函数返回值判断。
-    /// `deliverImmediately` 固定传 `true`，进程内同步送达观察者。
+    /// 发 Darwin 通知。不携带 payload，成功与否以 `loadLastSyncDate()` 或返回值判断。
     private static func postCompletion() {
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),

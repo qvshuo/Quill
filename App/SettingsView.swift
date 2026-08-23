@@ -34,8 +34,7 @@ struct SettingsView: View {
             && password.isEmpty
     }
 
-    /// 「允许完全访问」状态由键盘扩展记录到共享 App Group 默认值；
-    /// 无完全访问权限时扩展无法写入共享容器，故该值只会被写为 true。
+    /// 「允许完全访问」由键盘扩展记录到共享默认值；无权限时写不进，只会是 true。
     private var hasFullAccess: Bool {
         UserDefaults(suiteName: Paths.appGroupID)?.bool(forKey: "hasFullAccess") ?? false
     }
@@ -368,9 +367,7 @@ LabelledField(title: "安装 ID", infoAction: {
         )
     }
 
-    /// 逐级尝试直达「设置 → 通用 → 键盘」，全部失败才退回本 App 的设置页
-    /// （fcitx5-ios 同为尽力而为：系统未公开预调 URL scheme，现代 iOS 上多数
-    /// 版本只有 Settings.app 会响应，在这里存在配置即停）。
+    /// 逐级尝试直达键盘设置页，全部失败退回本 App 设置页（系统未公开直达 scheme）。
     private func openKeyboardSettings() {
         let schemes = [
             "prefs:root=General&path=Keyboard/KEYBOARDS",

@@ -13,8 +13,7 @@ public struct KeyboardView: View {
     let returnKeyType: UIReturnKeyType
     let onKey: (KeyAction) -> Void
 
-    /// 主题跟随系统深浅色（`@Environment(\.colorScheme)`，fcitx5-ios 同款）：
-    /// 控制器不再解析深浅色，由 SwiftUI 环境在系统切换时自动重求值。
+    /// 主题跟随系统深浅色，控制器不解析、由 SwiftUI 环境自动重求值。
     private var resolvedTheme: Theme {
         colorScheme == .dark ? .dark : .light
     }
@@ -31,17 +30,14 @@ public struct KeyboardView: View {
         self.keyboardType = keyboardType
         self.returnKeyType = returnKeyType
         self.onKey = onKey
-        let model = KeyboardViewModel()
-        model.rimeContext = rimeContext
-        model.inputState = inputState
-        self._viewModel = State(initialValue: model)
+        self._viewModel = State(initialValue: KeyboardViewModel())
     }
 
     public var body: some View {
         let theme = resolvedTheme
         GeometryReader { geometry in
             ZStack(alignment: .top) {
-                // 面板透明、由系统键盘容器统一绘制（fcitx5-ios 风格），避免色差。
+                // 面板透明，由系统键盘容器绘制背景。
                 Color.black.opacity(0.001)
                     .ignoresSafeArea()
 
@@ -75,9 +71,7 @@ public struct KeyboardView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .animation(.easeOut(duration: 0.1), value: candidatesExpanded)
         }
-        // 用主题计算出的总高度作为 SwiftUI 内在尺寸（fcitx5-ios 用
-        // .frame(height: totalHeight) 同思路），让系统键盘容器按此高度
-        // 平滑滑入，无需控制器手动设置 preferredContentSize。
+        // 用主题总高度作 SwiftUI 内在尺寸，系统键盘容器按此高度平滑滑入。
         .frame(height: theme.totalHeight)
         .frame(maxWidth: .infinity)
         // 同步进度提示：候选栏顶部居中悬浮胶囊，不挡按键点击。toast 状态只在
@@ -98,9 +92,7 @@ public struct KeyboardView: View {
         .onChange(of: returnKeyType) { _, newType in
             viewModel.handleReturnKeyType(newType)
         }
-        // 展开时一次性补齐全部候选，供网格选择。热路径只保留了当前页候选。
-        // 候选清空后的自动收起由 CandidatesBar / ExpandedCandidateGrid
-        // 在各自的 body 作用域观察（见子视图），不挂在整键盘 body 上。
+        // 展开时一次性补齐全部候选；候选清空的自动收起由子视图自行观察。
         .onChange(of: candidatesExpanded) { _, expanded in
             if expanded {
                 rimeContext.loadExpandedCandidates()
@@ -115,9 +107,7 @@ public struct KeyboardView: View {
         onKey(.selectCandidate(index))
     }
 
-    /// 键区：只依赖「布局/语言/大小写/同步状态」这些低频变化的行集合。
-    /// 敲键期间的 preedit/hasInputText/候选高频变化被收窄到 `KeyboardRowView`
-    /// （仅含回车键的行）与候选区子视图，不流经此方法。
+    /// 键区只依赖低频状态（布局/语言/大小写）；preedit 等高频变化收窄到行视图。
     private func keyArea(theme: Theme, in totalWidth: CGFloat) -> some View {
         VStack(spacing: theme.rowSpacing) {
             if viewModel.currentRows.isEmpty {
@@ -141,8 +131,7 @@ public struct KeyboardView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: keysAreaHeight)
             } else {
-                // 行的相对顺序固定（每 layout+language 的键位不变），用下标做稳定身份，
-                // 避免每次渲染重建导致 @State 丢失与视图树抖动。
+                // 行顺序固定，用下标做稳定身份，避免重建导致 @State 丢失与视图抖动。
                 ForEach(Array(viewModel.currentRows.enumerated()), id: \.offset) { _, row in
                     KeyboardRowView(
                         row: row,
@@ -171,11 +160,7 @@ public struct KeyboardView: View {
         // 同步 toast 展示期间屏蔽所有按键（字母/功能/切换键），待同步结果收起后再恢复。
         // `.startSync` 在 toast 置位前通过本入口，故长按空格仍能启动同步。
         guard inputState.toast == nil else { return }
-        // @State 的 viewModel 在 rootView 替换时保留首份实例，其弱引用可能指向旧
-        // context；consume() 前刷新为当前传入实例，避免走错对象（needsConfirm 等）。
-        viewModel.rimeContext = rimeContext
-        viewModel.inputState = inputState
-        if let transformed = viewModel.consume(action) {
+        if let transformed = viewModel.consume(action, rimeContext: rimeContext) {
             onKey(transformed)
             // 中/英切换：视图按当前语言把 ascii_mode 写回 RIME。
             if case .toggleLanguage = transformed {
@@ -185,8 +170,7 @@ public struct KeyboardView: View {
     }
 }
 
-/// 折叠候选栏：在自身 body 作用域观察候选，候选刷新只重求值本视图，
-/// 不重求值整棵键盘树（键盘树根 body 不读取候选状态）。
+/// 折叠候选栏：在自身 body 观察候选，刷新只重求值本视图。
 private struct CandidatesBar: View {
     let rimeContext: RimeContext
     let theme: Theme
@@ -201,16 +185,15 @@ private struct CandidatesBar: View {
             isExpanded: $isExpanded,
             onSelect: onSelect
         )
-        // 上屏/清空后候选为空时自动收起，避免空网格挡住键盘。
+        // 候选为空时自动收起，避免空网格挡住键盘。
         .onChange(of: rimeContext.candidates.isEmpty) { _, empty in
             if empty { isExpanded = false }
         }
     }
 }
 
-/// 单行键盘行视图：只有「含回车键的行」在自身 body 作用域读取
-/// `rimeContext.preedit` / `hasInputText`。拼音组合期间（preedit 变化）
-/// 只重求值这一行，其余行与整个键区不随敲键重渲染。
+/// 单行键盘行视图：仅含回车键的行读取 preedit / hasInputText，
+/// 组合期间只重求值这一行。
 private struct KeyboardRowView: View {
     let row: RowDescriptor
     let theme: Theme
@@ -222,8 +205,7 @@ private struct KeyboardRowView: View {
     let onKey: (KeyAction) -> Void
 
     var body: some View {
-        // 只有包含回车键的行才依赖 preedit / hasInputText：在自身 body 作用域读取。
-        // 三元条件短路保证不含回车键的行从不读取这两个属性（不被 Observation 追踪）。
+        // 三元条件短路保证不含回车键的行不读取 preedit / hasInputText（不被追踪）。
         let hasReturn = row.keys.contains { $0.action.isReturn }
         let hasPreedit = hasReturn ? !rimeContext.preedit.isEmpty : false
         let highlightReturn = hasReturn ? (!hasPreedit && inputState.hasInputText) : false
@@ -246,8 +228,7 @@ private struct KeyboardRowView: View {
         ))
 
         return HStack(spacing: 0) {
-                // 键位固定，用下标做稳定身份（见行 ForEach 说明）。行间距由 `gaps` 决定，
-                // 使 ⇧/⌫ 与字母之间能插入对齐空隙（见 RowLayoutMath）。
+                // 键位固定，用下标做稳定身份；行间距由 gaps 决定（见 RowLayoutMath）。
                 ForEach(Array(layout.keys.enumerated()), id: \.offset) { index, key in
                     if index > 0 {
                         Spacer()
@@ -304,14 +285,8 @@ private struct SyncToastOverlay: View {
     }
 }
 
-/// 同步 toast：候选栏顶部居中的悬浮胶囊。
-/// 状态语义（见 `SyncToast`）：`started` 在同步期间持续展示，由控制器在结果
-/// 到来时替换为 `.completed / .failed`；收起的时长由控制器计时（见
-/// `InputController.scheduleToastDismissal`），视图不承载。
-/// 纯文本，无交互，`allowsHitTesting(false)` 不挡候选与按键的点击。
-/// 视觉：胶囊形（非选中候选 pill），阴影与字体参考按键悬浮预览气泡
-/// （`Key.swift` 的 `shadow(color: .black.opacity(0.2), radius: 2, y: 1)`）；
-/// 字号较候选略小、前景用次级色调，保持易读但不喧宾夺主。
+/// 同步 toast：候选栏顶部居中的悬浮胶囊。`started` 持续到同步结束被替换，
+/// 收起时长由控制器计时；纯文本无交互，不挡点击。
 private struct SyncToastView: View {
     let toast: SyncToast
     let theme: Theme
@@ -331,9 +306,8 @@ private struct SyncToastView: View {
     }
 }
 
-/// 展开态候选网格：候选词铺满全宽、按文本自然宽度分行（`calculateLayout` 同款）。
-/// 首行与折叠候选栏垂直对齐（首行中心 = barHeight/2，顶边距按首行实际行高
-/// 34/32 计算），左对齐、让出 34pt 箭头区。只在自身 body 作用域观察候选。
+/// 展开态候选网格：按文本自然宽度分行，首行与折叠候选栏垂直对齐。
+/// 只在自身 body 观察候选。
 private struct ExpandedCandidateGrid: View {
     let rimeContext: RimeContext
     let theme: Theme
@@ -343,15 +317,14 @@ private struct ExpandedCandidateGrid: View {
 
     var body: some View {
         grid
-            // 上屏/清空后候选为空时自动收起，避免空网格挡住键盘。
+            // 候选为空时自动收起，避免空网格挡住键盘。
             .onChange(of: rimeContext.candidates.isEmpty) { _, empty in
                 if empty { onCollapse() }
             }
     }
 
-    /// 网格在展开/选取时会被重建，候选会异步变为当前页或空。网格行的排版
-    /// 与单元格绘制必须基于同一份快照，避免 LazyVStack 惰性渲染读到已被
-    /// 替换的、更短的 `candidates` 数组而下标越界崩溃。
+    /// 排版与单元格绘制必须基于同一份候选快照，避免 LazyVStack 惰性渲染
+    /// 读到被替换的更短数组而越界。
     private var grid: some View {
         let barHeight = theme.candidateBarHeight + theme.keyboardPadding.top
         let gridPadding: CGFloat = theme.keyboardPadding.leading
@@ -399,12 +372,10 @@ private struct ExpandedCandidateGrid: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// 网格候选单元格：文本左对齐（首列与折叠候选栏首词对齐）。内容自然宽度
-    /// （仅设 minWidth），不缩字体、不强塞，放不下由分行逻辑换到下一行。
+    /// 网格单元格：自然宽度、左对齐，放不下由分行逻辑换行。
     @ViewBuilder
     private func cell(index: Int, list: [Candidate], minWidth: CGFloat) -> some View {
-        // 惰性网格读的是传入的快照 `list`，若取选中后候选被替换，跳过的单元格
-        // 直接返回空视图，绝不越界读取。
+        // 惰性渲染可能读到被替换的快照，越界下标返回空视图。
         if list.indices.contains(index) {
             let candidate = list[index]
             CandidateCellView(

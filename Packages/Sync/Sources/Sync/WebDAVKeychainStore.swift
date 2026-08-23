@@ -47,10 +47,9 @@ public enum WebDAVKeychainStore {
         ]
     }
 
-    /// 删除 `service`+`account` 条目。注意必须同时清「共享 group」和「进程默认 group」：
-    /// 自签/未签名时共享 group 不可用，第一次保存会落到默认 group；若只删共享
-    /// group，第二次保存就会因默认 group 里已存在同 service+account 的条目而
-    /// 返回 `errSecDuplicateItem`，表现为「保存失败」。
+    /// 删除条目。必须同时清「共享 group」和「进程默认 group」：自签下共享 group
+    /// 不可用、首次保存落到默认 group，只删共享 group 会留下重复条目导致
+    /// 第二次保存 `errSecDuplicateItem`。
     private static func delete(service: String, account: String) {
         let base = baseQuery(service: service, account: account)
         if let group = resolveAccessGroup(), !group.isEmpty {
@@ -66,7 +65,6 @@ public enum WebDAVKeychainStore {
     }
 
     /// 写入 generic password：优先共享 access group，失败回退进程默认 group。
-    /// 回退前先清一次默认 group 残留，避免 `errSecDuplicateItem`。
     private static func upsert(service: String, account: String, data: Data) -> OSStatus {
         var query = baseQuery(service: service, account: account)
         query[kSecValueData as String] = data
@@ -147,16 +145,9 @@ public enum WebDAVKeychainStore {
     }
 
     /// 解析共享 keychain access group `<TeamID>art.anjing.quill.shared`。
-    ///
-    /// iOS 上没有公开 API 直接读自己的 entitlements（`SecTask`/`SecCode` 是私有
-    /// API，`SecCodeCopySigningInformation` 在 iOS SDK 里没有头文件）。改用公开
-    /// 的探测法：写入一条不带 access group 的临时条目，keychain 会给它分配应用
-    /// 默认 access group = `<TeamID><bundleID>`（有团队签名时），再读回来、取
-    /// bundle ID 之前的部分作为 Team 前缀。
-    ///
-    /// 自签/无团队前缀时默认 group 就是 bundle ID，探测不到前缀 → 返回 nil，
-    /// 调用方回退到进程默认 group（主 App 与键盘各自独立保存，无法跨进程共享，
-    /// 但保存本身可用）。
+    /// iOS 无公开 API 读自己的 entitlements，改用探测法：写一条不带 access group
+    /// 的临时条目再读回，其默认 access group = `<TeamID><bundleID>`，取 bundle ID
+    /// 之前的部分作为 Team 前缀。自签探测不到前缀时返回 nil，调用方回退进程默认 group。
     private static func resolveAccessGroup() -> String? {
         let probeService = service + ".probe"
         let probe: [String: Any] = [

@@ -28,6 +28,15 @@ public struct WebDAVCredentials: Codable, Equatable, Sendable {
 
 /// WebDAV 凭据的 Keychain 读写。共享 access group `$(AppIdentifierPrefix)art.anjing.quill.shared`，
 /// 主 App 与键盘扩展均可访问（自签下 App Identifier Prefix 一致即可）。
+///
+/// 条目清单（git 历史核查过，从未变更；卸载重装不清钥匙串，删除须显式覆盖全部名字）：
+/// - 凭据：service `art.anjing.quill.webdav` / account `config`
+/// - 最近同步时间：service `art.anjing.quill.webdav.syncstate` / account `lastSync`
+/// - Team 前缀探测（瞬态）：service `…webdav.probe` / account `config`
+///
+/// 每个条目可能落在共享组或进程默认组，`delete()` 两组都清。
+/// 已知边界：键盘进程在无共享组时写入自己默认组的条目，主 App 受钥匙串
+/// ACL 限制删不到——凭据只在主 App 写入，实际不受影响。
 public enum WebDAVKeychainStore {
     private static let service = "art.anjing.quill.webdav"
     private static let account = "config"
@@ -52,6 +61,8 @@ public enum WebDAVKeychainStore {
     /// 第二次保存 `errSecDuplicateItem`。
     private static func delete(service: String, account: String) {
         let base = baseQuery(service: service, account: account)
+        // 探测条目中途崩溃会遗留 .probe 残骸，顺手清掉。
+        SecItemDelete(baseQuery(service: service + ".probe", account: account) as CFDictionary)
         if let group = resolveAccessGroup(), !group.isEmpty {
             var query = base
             query[kSecAttrAccessGroup as String] = group

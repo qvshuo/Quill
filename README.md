@@ -11,9 +11,11 @@
 
 ## 安装
 
-1. 从 App Store（或侧载）安装 Quill；
+1. 从 [Releases](https://github.com/qvshuo/Quill/releases) 下载最新 ipa（或通过 App Store / 侧载工具安装）；
 2. 打开「设置 → 通用 → 键盘 → 键盘」→「添加新键盘…」→ 选择 **Quill 输入法**；
 3. 点按 Quill → 开启「允许完全访问」（同步功能必需）。
+
+> Release 附带的 ipa 未签名，需用 AltStore、TrollStore 等工具自签后安装。
 
 ## 使用
 

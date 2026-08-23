@@ -73,7 +73,8 @@ cp -R build/dd/Build/Products/Release-iphoneos/Quill.app /tmp/ipa_stage/Payload/
 cd /tmp/ipa_stage && zip -r -y -X Quill-unsigned.ipa Payload
 ```
 
-- The `Copy SharedSupport` build phase (`cp -R Resources/SharedSupport` → `.app/`) declares its destination in `outputPaths`, so the script sandbox (default `YES`) allows the write.
+- The `Copy SharedSupport` build phase (`rm -rf` + `cp -R Resources/SharedSupport` → `.app/SharedSupport`) declares its destination in `outputPaths`, so the script sandbox (default `YES`) allows the write. Do not revert to a bare `cp -R` onto the existing directory — it nests `SharedSupport/SharedSupport` on every incremental build.
+- **Releases are automated**: pushing a `v*` tag (`.github/workflows/release.yml`, macOS runner + `actions/checkout@v7`) builds the same unsigned device ipa and publishes a GitHub Release with auto-generated notes via `gh release create`. Release steps: bump `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in `project.yml` (the single version source — both plists reference `$(MARKETING_VERSION)`), commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`. Note the runner image names Xcode bundles with a `.app` suffix (`Xcode_26.6.0.app`) — don't append another one when selecting.
 - Rebuilding librime from source is optional (Frameworks are committed): `scripts/build-librime.sh` expects a `librime/` clone (containing its `deps/`) at the repo's **parent directory** (`$ROOT/../librime`).
 - Enabling the keyboard in the Simulator requires **Settings › General › Keyboard** (editing the `com.apple.keyboard.preferences` plist alone is not enough). Grant Full Access so the extension can read the App Group container.
 

@@ -11,8 +11,8 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     IPHONEOS_DEPLOYMENT_TARGET: "26.0"
     # 版本号唯一来源：两个 target 的 Info.plist 引用 $(MARKETING_VERSION)/$(CURRENT_PROJECT_VERSION)。
-    MARKETING_VERSION: "1.1.3"
-    CURRENT_PROJECT_VERSION: "8"
+    MARKETING_VERSION: "1.1.4"
+    CURRENT_PROJECT_VERSION: "9"
 packages:
   RimeEngine:
     path: Packages/RimeEngine

@@ -61,6 +61,7 @@ struct SettingsView: View {
                             .frame(width: 24)
                         Text(isOurKeyboardEnabled ? "Quill 输入法已启用" : "Quill 输入法未启用")
                     }
+                    .padding(.top, 8)
                     if !isOurKeyboardEnabled {
                         Button {
                             openKeyboardSettings()
@@ -107,30 +108,30 @@ struct SettingsView: View {
                             .focused($focusedField, equals: .password)
                             .clearableField(text: $password, isFocused: focusedField == .password)
                     }
-LabelledField(title: "同步目录", infoAction: {
-                            syncAlert = SyncAlert(
-                                title: "同步目录",
-                                message: "WebDAV 服务器上存放各设备同步数据的文件夹名。（默认为 Rime_Sync）"
-                            )
-                        }) {
-                            TextField("默认 Rime_Sync", text: $syncPath)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .focused($focusedField, equals: .syncPath)
-                                .clearableField(text: $syncPath, isFocused: focusedField == .syncPath)
-                        }
-LabelledField(title: "安装 ID", infoAction: {
-                            syncAlert = SyncAlert(
-                                title: "安装 ID",
-                                message: "本设备的标识 （默认为 Quill），各设备以此目录名区分。"
-                            )
-                        }) {
-                            TextField("默认 Quill", text: $installationID)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .focused($focusedField, equals: .installationID)
-                                .clearableField(text: $installationID, isFocused: focusedField == .installationID)
-                        }
+                    LabelledField(title: "同步目录", infoAction: {
+                        syncAlert = SyncAlert(
+                            title: "同步目录",
+                            message: "WebDAV 服务器上存放各设备同步数据的文件夹名。"
+                        )
+                    }) {
+                        TextField("默认 Rime_Sync", text: $syncPath)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .syncPath)
+                            .clearableField(text: $syncPath, isFocused: focusedField == .syncPath)
+                    }
+                    LabelledField(title: "安装 ID", infoAction: {
+                        syncAlert = SyncAlert(
+                            title: "安装 ID",
+                            message: "本设备的标识，各设备以此目录名区分。"
+                        )
+                    }) {
+                        TextField("默认 Quill", text: $installationID)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .installationID)
+                            .clearableField(text: $installationID, isFocused: focusedField == .installationID)
+                    }
                     Button {
                         testAndSave()
                     } label: {
@@ -151,7 +152,7 @@ LabelledField(title: "安装 ID", infoAction: {
                         Button {
                             syncAlert = SyncAlert(
                                 title: "同步",
-                                message: "通过 WebDAV 双向同步 RIME 自定义短语和朙月拼音输入方案的用户词库。\n调起键盘后，长按空格键 3 秒开始同步。"
+                                message: "通过 WebDAV 双向同步 RIME 自定义短语和朙月拼音输入方案的用户词库。"
                             )
                         } label: {
                             Image(systemName: "info.circle")
@@ -174,6 +175,16 @@ LabelledField(title: "安装 ID", infoAction: {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderless)
+                    // 挂在按钮上让 iOS 26 把确认弹窗锚定到按钮附近；挂在 Form 级会飘到屏幕顶部。
+                    .confirmationDialog(
+                        "删除钥匙串中保存的同步凭据？",
+                        isPresented: $isConfirmingDelete,
+                        titleVisibility: .visible
+                    ) {
+                        Button("删除", role: .destructive) {
+                            deleteCredentials()
+                        }
+                    }
                 }
 
                 Section("日志") {
@@ -217,15 +228,6 @@ LabelledField(title: "安装 ID", infoAction: {
                     message: Text(syncAlert.message),
                     dismissButton: .default(Text("好"))
                 )
-            }
-            .confirmationDialog(
-                "删除钥匙串中保存的同步凭据？",
-                isPresented: $isConfirmingDelete,
-                titleVisibility: .visible
-            ) {
-                Button("删除", role: .destructive) {
-                    deleteCredentials()
-                }
             }
             .task {
                 await rimeContext.start()

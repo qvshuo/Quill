@@ -249,8 +249,8 @@ final class InputController: UIInputViewController {
         let rime = rimeContext
         // 弱引用：键盘收起时不应把控制器保留到同步结束（最坏 15s+）。
         Task { [weak self] in
-            let success = await WebDAVSync.syncWithTimeout(.seconds(15))
-            rime.log("Keyboard: manual WebDAV sync done success=\(success)")
+            let outcome = await WebDAVSync.syncWithTimeout(.seconds(30))
+            rime.log("Keyboard: manual WebDAV sync done outcome=\(outcome)")
             await MainActor.run {
                 guard let self else { return }
                 if self.rimeContext.preedit.isEmpty {
@@ -261,10 +261,15 @@ final class InputController: UIInputViewController {
                         rimeForRecreate.recreateSession()
                     }
                 }
-                let toast: SyncToast = success ? .completed : .failed
+                let toast: SyncToast
+                switch outcome {
+                case .completed: toast = .completed
+                case .timedOut: toast = .timedOut
+                case .failed: toast = .failed
+                }
                 self.inputState.toast = toast
                 self.isSyncing = false
-                self.scheduleToastDismissal(delay: toast == .failed ? 4.0 : 2.5)
+                self.scheduleToastDismissal(delay: toast == .completed ? 2.5 : 4.0)
             }
         }
     }

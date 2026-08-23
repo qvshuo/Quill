@@ -181,19 +181,27 @@ public enum WebDAVSync {
         }
     }
 
-    /// 带超时的同步，超时返回 `false`。用「竞速」而非「取消」：中途取消会让
+    /// 带超时的同步结果：竞速输家不被取消——超时判负时同步仍在后台跑，
+    /// 最终大概率完成（上传/合入照常发生），只是结果不再回报。
+    public enum SyncOutcome: Sendable {
+        case completed
+        case timedOut
+        case failed
+    }
+
+    /// 带超时的同步。用「竞速」而非「取消」：中途取消会让
     /// `withCheckedThrowingContinuation` 与队列回调双 resume；输家在后台跑完即被丢弃。
     @discardableResult
-    public static func syncWithTimeout(_ timeout: Duration = .seconds(15)) async -> Bool {
+    public static func syncWithTimeout(_ timeout: Duration = .seconds(30)) async -> SyncOutcome {
         await withCheckedContinuation { continuation in
             let winner = RaceWinner()
             let syncTask = Task {
                 let result = await sync()
-                winner.finish(result: result, continuation)
+                winner.finish(result: result ? .completed : .failed, continuation)
             }
             let timeoutTask = Task {
                 try? await Task.sleep(for: timeout)
-                winner.finish(result: false, continuation)
+                winner.finish(result: .timedOut, continuation)
             }
             // 两个 Task 被子闭包强持有即可保持存活；输家跑完即被丢弃。
             _ = syncTask
@@ -206,7 +214,7 @@ public enum WebDAVSync {
     private final class RaceWinner: Sendable {
         private let winner = Mutex(false)
 
-        func finish(result: Bool, _ continuation: CheckedContinuation<Bool, Never>) {
+        func finish(result: SyncOutcome, _ continuation: CheckedContinuation<SyncOutcome, Never>) {
             let shouldResume = winner.withLock { state in
                 if state { return false }
                 state = true

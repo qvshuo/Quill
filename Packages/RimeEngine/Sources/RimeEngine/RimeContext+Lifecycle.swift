@@ -25,6 +25,9 @@ extension RimeContext {
             }.value
             // 预热 session 避免首次按键迟滞；回到主线程创建，保证可观测状态只在主线程写。
             createSessionIfNeeded()
+            // 本应用按自签安装设计：无 App Group 是常态，两个进程词库/日志各自独立，
+            // 排障时先用这行确认当前进程的日志落点。
+            self.log("AppGroup \(Paths.appGroupContainer != nil ? "shared" : "per-app (self-signed baseline)")")
             self.log("RIME ready")
         } catch {
             log(error.localizedDescription)

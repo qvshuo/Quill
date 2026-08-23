@@ -84,7 +84,9 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                     }
                 } footer: {
-                    if isOurKeyboardEnabled, !hasFullAccess {
+                    // 完全访问标志经共享默认值传递；per-app 自签基线下无共享通道，
+                    // 读不到 ≠ 未授权，不提示以免永久误导。
+                    if Paths.appGroupContainer != nil, isOurKeyboardEnabled, !hasFullAccess {
                         Text("请在系统设置中授权「允许完全访问」以获得完整功能体验。")
                     }
                 }

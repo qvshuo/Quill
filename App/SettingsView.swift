@@ -158,7 +158,7 @@ LabelledField(title: "安装 ID", infoAction: {
                         Button {
                             syncAlert = SyncAlert(
                                 title: "同步",
-                                message: "通过 WebDAV 双向同步 RIME 自定义短语和朙月拼音输入方案的用户词库。\n调起键盘后，长按空格键 5 秒开始同步。"
+                                message: "通过 WebDAV 双向同步 RIME 自定义短语和朙月拼音输入方案的用户词库。\n调起键盘后，长按空格键 3 秒开始同步。"
                             )
                         } label: {
                             Image(systemName: "info.circle")
@@ -173,7 +173,7 @@ LabelledField(title: "安装 ID", infoAction: {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    Text("调起键盘后，长按空格键 5 秒开始同步。")
+                    Text("调起键盘后，长按空格键 3 秒开始同步。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -454,7 +454,7 @@ private struct ClearableFieldModifier: ViewModifier {
                         text = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14, weight: .regular))
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                             .padding(.trailing, 8)
                             .contentShape(Rectangle())

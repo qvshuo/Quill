@@ -86,7 +86,7 @@
 | fcitx5-ios | 同 Quill：`.dark ? 深版 : 亮版`，view 内 `@Environment(\.colorScheme)` 自动跟随 | 最简 |
 
 ### 键帽配色
-- **Quill**：键帽纯色块，`Theme` 提供 base colors；深色 = 半透明叠加（白 0.21 / 灰 0.17 / 白 0.30），贴合 fcitx5-ios 风格；按压单一 `pressedKeyBackground` tone。confirm 键 `#007AFF`；候选选中 pill。无渐变/阴影/描边。
+- **Quill**：键帽纯色块，`Theme` 提供 base colors；深色 = 半透明叠加（alpha 由 `overlay(base:target:)` 从背板常量与目标灰反解），贴合 fcitx5-ios 风格；按压单一 `pressedKeyBackground` tone。confirm 键 `#007AFF`；候选选中 pill。无渐变/阴影/描边。
 - **Squirrel**：桌面无「键帽」，候选面板由用户挑 `color_scheme` 预存（原生支持 `preset_color_schemes`）。
 - **Hamster**：`buttonBackgroundColorForStyle`（样式态/按下态区分）+ 自定义主题、键帽字体颜色、圆角。
 - **fcitx5-ios**：key cap 用「深浅色两套 + 半透明叠加 blend」参数，高亮 `#007AFF`。有 `blend` 帮助函数。

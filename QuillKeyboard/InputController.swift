@@ -18,7 +18,7 @@ final class InputController: UIInputViewController {
     private var lastKeyboardType: UIKeyboardType?
     private var lastReturnKeyType: UIReturnKeyType?
 
-    /// 手动同步（长按空格键 5 秒触发）是否进行中，防止重复触发。
+    /// 手动同步（长按空格键 3 秒触发）是否进行中，防止重复触发。
     private var isSyncing = false
 
     /// `.completed / .failed` toast 的自动收起任务。

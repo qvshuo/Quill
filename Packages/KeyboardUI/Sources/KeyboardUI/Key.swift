@@ -7,13 +7,15 @@ public struct Key: View {
     let theme: Theme
     let shiftState: ShiftState
     let action: (KeyAction) -> Void
+    /// 仅空格键长按同步用：把预告进度写入宿主状态（顶部胶囊读取展示）。
+    var inputState: InputState?
 
     @State private var isPressed = false
     @State private var repeater: KeyPressRepeater?
-    /// 空格键 5 秒长按定时器与触发标记。
-    @State private var spaceHoldWorkItem: DispatchWorkItem?
+    /// 空格键长按同步：步进计时器与已按住秒数（满 `Theme.spaceSyncHoldDuration` 秒触发）。
+    @State private var spaceHoldTimer: Timer?
+    @State private var holdElapsed: Double = 0
     @State private var spaceHoldTriggeredSync = false
-    private static let spaceSyncHoldDuration: TimeInterval = 5.0
 
     private var isRepeatable: Bool {
         descriptor.action.isBackspace
@@ -33,11 +35,13 @@ public struct Key: View {
         descriptor: KeyDescriptor,
         theme: Theme,
         shiftState: ShiftState = .lowercase,
+        inputState: InputState? = nil,
         action: @escaping (KeyAction) -> Void
     ) {
         self.descriptor = descriptor
         self.theme = theme
         self.shiftState = shiftState
+        self.inputState = inputState
         self.action = action
     }
 
@@ -109,8 +113,9 @@ public struct Key: View {
             }
     }
 
-    /// 空格键：单击上屏空格（双击=句号逻辑由控制器处理），长按 5 秒触发手动同步。
-    /// 不重复连打空格；长按期间松手则按普通空格处理，满 5 秒才触发同步并吞掉本次松手。
+    /// 空格键：单击上屏空格（双击=句号逻辑由控制器处理），长按 3 秒触发手动同步，
+    /// 按住期间键面中央显示环形进度。不重复连打空格；长按期间松手则按普通空格
+    /// 处理，满 3 秒才触发同步并吞掉本次松手。
     private var spaceKeyBody: some View {
         keyLabel
             .foregroundStyle(foregroundColor)
@@ -134,7 +139,7 @@ public struct Key: View {
                     onRelease: {
                         isPressed = false
                         cancelSpaceHoldTimer()
-                        // 长按满 5 秒已触发同步，本次松手不再输入空格。
+                        // 长按满 3 秒已触发同步，本次松手不再输入空格。
                         if !spaceHoldTriggeredSync {
                             action(.space)
                         }
@@ -152,23 +157,42 @@ public struct Key: View {
             }
     }
 
-    /// 空格长按 5 秒后触发同步。
+    /// 空格长按计时：每 0.05s 步进，超过 `Theme.spaceSyncPreviewDelay` 后把进度
+    /// 写入 `InputState.syncHoldProgress`（顶部预告胶囊展示），满
+    /// `Theme.spaceSyncHoldDuration` 秒触发同步（触觉 + `.startSync`）。
     private func startSpaceHoldTimer() {
         spaceHoldTriggeredSync = false
-        spaceHoldWorkItem?.cancel()
+        holdElapsed = 0
+        inputState?.syncHoldProgress = nil
+        spaceHoldTimer?.invalidate()
         // self 是结构体值拷贝，闭包内通过 @State 的非 mutating setter 写共享存储即可。
-        let item = DispatchWorkItem { [self] in
-            self.spaceHoldTriggeredSync = true
-            KeyboardFeedback.play()
-            self.action(.startSync)
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [self] _ in
+            MainActor.assumeIsolated {
+                guard holdElapsed < Theme.spaceSyncHoldDuration else { return }
+                holdElapsed = min(Theme.spaceSyncHoldDuration, holdElapsed + 0.05)
+                if holdElapsed >= Theme.spaceSyncPreviewDelay {
+                    inputState?.syncHoldProgress =
+                        holdElapsed / Theme.spaceSyncHoldDuration
+                }
+                if holdElapsed >= Theme.spaceSyncHoldDuration {
+                    spaceHoldTimer?.invalidate()
+                    spaceHoldTimer = nil
+                    inputState?.syncHoldProgress = nil
+                    spaceHoldTriggeredSync = true
+                    KeyboardFeedback.play()
+                    action(.startSync)
+                }
+            }
         }
-        spaceHoldWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.spaceSyncHoldDuration, execute: item)
+        spaceHoldTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func cancelSpaceHoldTimer() {
-        spaceHoldWorkItem?.cancel()
-        spaceHoldWorkItem = nil
+        spaceHoldTimer?.invalidate()
+        spaceHoldTimer = nil
+        holdElapsed = 0
+        inputState?.syncHoldProgress = nil
     }
 
     @ViewBuilder
@@ -176,25 +200,33 @@ public struct Key: View {
         switch descriptor.action {
         case .backspace:
             Image(systemName: "delete.left")
-                .font(.system(size: 21, weight: .medium))
+                .font(.system(size: theme.iconFontSize, weight: .medium))
+                .accessibilityLabel("删除")
         case .space:
             Color.clear
                 .accessibilityLabel("空格")
         case .return:
             Text(descriptor.label)
                 .font(.system(size: theme.specialKeyFontSize, weight: .regular))
-        case .numbers, .letters, .symbols, .toggleLanguage:
+                .accessibilityLabel(descriptor.label == "⏎" ? "换行" : descriptor.label)
+        case .numbers, .letters, .symbols:
             Text(descriptor.label)
                 .font(.system(size: theme.specialKeyFontSize, weight: .regular))
+                .accessibilityLabel(descriptor.label)
+        case .toggleLanguage:
+            Text(descriptor.label)
+                .font(.system(size: theme.specialKeyFontSize, weight: .regular))
+                .accessibilityHint("切换中英文输入")
         case .shift:
             Image(systemName: shiftImageName)
-                .font(.system(size: 21, weight: shiftState == .uppercaseLocked ? .semibold : .medium))
+                .font(.system(size: theme.iconFontSize, weight: shiftState == .uppercaseLocked ? .semibold : .medium))
                 .scaleEffect(shiftState == .uppercaseLocked ? 1.2 : 1.0)
                 .animation(.easeOut(duration: 0.1), value: shiftState)
-                .accessibilityLabel("大小写")
+                .accessibilityLabel(shiftState == .lowercase ? "大写" : "小写")
         default:
             Text(descriptor.label)
                 .font(theme.font)
+                .accessibilityLabel(descriptor.label)
         }
     }
 
@@ -241,16 +273,16 @@ private struct KeyButtonStyle: ButtonStyle {
             .overlay(alignment: .top) {
                 if configuration.isPressed, let previewText {
                     Text(previewText)
-                        .font(.system(size: 30, weight: .regular))
+                        .font(.system(size: theme.previewFontSize, weight: .regular))
                         .foregroundStyle(theme.keyForeground)
-                        .frame(width: 48, height: 48)
+                        .frame(width: theme.previewBubbleSide, height: theme.previewBubbleSide)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: theme.previewBubbleCornerRadius, style: .continuous)
                                 // 不透明：半透明气泡会透出键缝显得「透明」。
                                 .fill(theme.previewBubbleBackground)
                         )
-                        .shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)
-                        .offset(y: -47)
+                        .floatingShadow()
+                        .offset(y: theme.previewBubbleOffsetY)
                         .allowsHitTesting(false)
                 }
             }

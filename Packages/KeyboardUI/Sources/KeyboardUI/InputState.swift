@@ -14,6 +14,10 @@ public final class InputState {
     /// 同步瞬时提示（长按空格键触发），KeyboardView 顶部悬浮胶囊据此展示；
     /// 收起的时长由键盘控制器掌握（`InputController.scheduleToastDismissal`）。
     public var toast: SyncToast? = nil
+    /// 空格长按同步的预告进度（0…1，nil = 未在长按）。由空格键计时器写入，
+    /// 超过 `Theme.spaceSyncPreviewDelay` 才开始写（快速点空格不闪预告）；
+    /// 顶部预告胶囊据此展示，触发同步后置 nil 交棒给 toast。
+    public var syncHoldProgress: Double? = nil
 
     public init() {}
 }

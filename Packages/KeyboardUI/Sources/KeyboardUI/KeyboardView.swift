@@ -74,8 +74,8 @@ public struct KeyboardView: View {
         // 用主题总高度作 SwiftUI 内在尺寸，系统键盘容器按此高度平滑滑入。
         .frame(height: theme.totalHeight)
         .frame(maxWidth: .infinity)
-        // 同步进度提示：候选栏顶部居中悬浮胶囊，不挡按键点击。toast 状态只在
-        // `SyncToastOverlay` 自身 body 读取，变化不重求值整棵键盘树。
+        // 同步提示：候选栏顶部居中悬浮胶囊（长按预告 / 同步结果），不挡按键点击。
+        // toast 与长按进度只在 `SyncToastOverlay` 自身 body 读取，变化不重求值整棵键盘树。
         .overlay(alignment: .top) {
             SyncToastOverlay(inputState: inputState, theme: theme)
         }
@@ -243,6 +243,7 @@ private struct KeyboardRowView: View {
                         ),
                         theme: theme,
                         shiftState: shiftState,
+                        inputState: inputState,
                         action: onKey
                     )
                     .frame(
@@ -267,21 +268,72 @@ private struct KeyboardRowView: View {
     }
 }
 
-/// 同步 toast 悬浮层：在自身 body 作用域观察 `inputState.toast`，
-/// toast 出现/替换/消失只重求值本视图，不重求值整棵键盘树。
+/// 同步悬浮层：在自身 body 作用域观察 `inputState`，toast / 长按预告的出现、
+/// 替换、消失只重求值本视图，不重求值整棵键盘树。两者同位互斥：
+/// 预告胶囊（长按中）→ toast（触发后）。
 private struct SyncToastOverlay: View {
     let inputState: InputState
     let theme: Theme
 
+    private enum Phase {
+        case hidden, holdHint, toast
+    }
+
+    private var phase: Phase {
+        if inputState.toast != nil { return .toast }
+        if inputState.syncHoldProgress != nil { return .holdHint }
+        return .hidden
+    }
+
     var body: some View {
         Group {
-            if let toast = inputState.toast {
-                SyncToastView(toast: toast, theme: theme)
-                    .padding(.top, 4)
-                    .transition(.opacity)
+            switch phase {
+            case .toast:
+                if let toast = inputState.toast {
+                    SyncToastView(toast: toast, theme: theme)
+                        .padding(.top, 4)
+                }
+            case .holdHint:
+                if let progress = inputState.syncHoldProgress {
+                    SyncHoldHintView(progress: progress, theme: theme)
+                        .padding(.top, 4)
+                }
+            case .hidden:
+                EmptyView()
             }
         }
-        .animation(.easeInOut(duration: 0.15), value: inputState.toast)
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.15), value: phase)
+    }
+}
+
+/// 空格长按同步预告：迷你进度环 + 「继续按住同步」，样式与同步 toast 同一
+/// 视觉语言（同位置、胶囊、keyBackground 填充、共用阴影规格）。进度环随
+/// 按住线性填充，松手消失，满 3 秒交棒给「正在同步…」toast。
+private struct SyncHoldHintView: View {
+    let progress: Double
+    let theme: Theme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(.secondary, style: StrokeStyle(lineWidth: theme.syncRingLineWidth, lineCap: .round))
+                .frame(width: theme.syncRingSize, height: theme.syncRingSize)
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 0.05), value: progress)
+            Text("继续按住同步")
+                .font(.system(size: theme.toastFontSize, weight: .regular))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, theme.toastHPadding)
+        .padding(.vertical, theme.toastVPadding)
+        .background {
+            Capsule()
+                .fill(theme.keyBackground)
+                .floatingShadow()
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -293,14 +345,14 @@ private struct SyncToastView: View {
 
     var body: some View {
         Text(toast.message)
-            .font(.system(size: 15, weight: .regular))
+            .font(.system(size: theme.toastFontSize, weight: .regular))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
+            .padding(.horizontal, theme.toastHPadding)
+            .padding(.vertical, theme.toastVPadding)
             .background {
                 Capsule()
                     .fill(theme.keyBackground)
-                    .shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)
+                    .floatingShadow()
             }
             .allowsHitTesting(false)
     }

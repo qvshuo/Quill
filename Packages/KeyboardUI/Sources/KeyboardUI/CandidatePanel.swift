@@ -95,6 +95,8 @@ struct CandidateCellView: View {
                 }
         }
         .buttonStyle(CandidateFeedbackButtonStyle())
+        .accessibilityLabel(text)
+        .accessibilityHint("上屏")
     }
 }
 
@@ -109,13 +111,14 @@ struct CandidateChevronButton: View {
         Button(action: action) {
             // 折叠向下箭头、展开向上箭头（iOS 惯例）。
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: theme.chevronIconFontSize, weight: .medium))
                 // 深浅色模式一致的固定灰色。
                 .foregroundStyle(Color(hex: 0x4D5650))
                 .frame(width: theme.chevronWidth, height: height)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(isExpanded ? "收起候选" : "展开候选")
     }
 }
 

@@ -33,6 +33,26 @@ public struct Theme {
     public let candidateCellFontSize: CGFloat
     /// 特殊键（123 / ABC / 中英切换 / 回车等）的文字字号。
     public let specialKeyFontSize: CGFloat
+    /// 同步 toast 文字字号与内边距。
+    public let toastFontSize: CGFloat
+    public let toastHPadding: CGFloat
+    public let toastVPadding: CGFloat
+    /// 字符键按压气泡：边长 / 圆角 / 上移偏移 / 字号。
+    public let previewBubbleSide: CGFloat
+    public let previewBubbleCornerRadius: CGFloat
+    public let previewBubbleOffsetY: CGFloat
+    public let previewFontSize: CGFloat
+    /// 功能键图标（退格 / shift）字号。
+    public let iconFontSize: CGFloat
+    /// 候选展开箭头字号。
+    public let chevronIconFontSize: CGFloat
+    /// 空格长按同步预告胶囊的迷你进度环：直径与线宽。
+    public let syncRingSize: CGFloat
+    public let syncRingLineWidth: CGFloat
+    /// 空格长按触发手动同步的按住秒数。
+    public static let spaceSyncHoldDuration: TimeInterval = 3.0
+    /// 预告胶囊出现前的按住延迟（快速点空格不闪预告）。
+    public static let spaceSyncPreviewDelay: TimeInterval = 0.5
     public let font: Font
     public let candidateFont: Font
 
@@ -57,15 +77,15 @@ public struct Theme {
     )
 
     public nonisolated(unsafe) static let dark = Theme(
-        // 半透明叠加：经系统深色背板（≈#2B2B2B）混合后 ≈ 原不透明色
-        // （keyBackground→#585858、special→#3A3A3A、pressed→#6B6B6B、selection→#5A5A5A）。
-        keyBackground: Color.white.opacity(0.21),
-        specialKeyBackground: Color(red: 133 / 255, green: 133 / 255, blue: 133 / 255).opacity(0.17),
-        pressedKeyBackground: Color.white.opacity(0.30),
+        // 半透明叠加：由 `overlay(base:target:)` 反解 alpha，经系统深色背板
+        // （`darkBackdrop` ≈ #2B2B2B）混合后精确命中目标观感色。
+        keyBackground: Theme.overlay(target: 0x585858),
+        specialKeyBackground: Theme.overlay(base: 0x858585, target: 0x3A3A3A),
+        pressedKeyBackground: Theme.overlay(target: 0x6B6B6B),
         keyForeground: Color(hex: 0xFFFFFF),
         specialKeyForeground: Color(hex: 0xFFFFFF),
         previewBubbleBackground: Color(hex: 0x585858),
-        candidateSelectionFill: Color.white.opacity(0.22),
+        candidateSelectionFill: Theme.overlay(target: 0x5A5A5A),
         geometry: base
     )
 
@@ -84,6 +104,17 @@ public struct Theme {
         candidateSelectionCornerRadius: 9,
         candidateCellFontSize: 19,
         specialKeyFontSize: 17,
+        toastFontSize: 15,
+        toastHPadding: 16,
+        toastVPadding: 9,
+        previewBubbleSide: 48,
+        previewBubbleCornerRadius: 10,
+        previewBubbleOffsetY: -47,
+        previewFontSize: 30,
+        iconFontSize: 21,
+        chevronIconFontSize: 13,
+        syncRingSize: 14,
+        syncRingLineWidth: 2,
         font: .system(size: 24, weight: .regular),
         candidateFont: .system(size: 19, weight: .regular)
     )
@@ -118,6 +149,17 @@ public struct Theme {
         self.candidateSelectionCornerRadius = geometry.candidateSelectionCornerRadius
         self.candidateCellFontSize = geometry.candidateCellFontSize
         self.specialKeyFontSize = geometry.specialKeyFontSize
+        self.toastFontSize = geometry.toastFontSize
+        self.toastHPadding = geometry.toastHPadding
+        self.toastVPadding = geometry.toastVPadding
+        self.previewBubbleSide = geometry.previewBubbleSide
+        self.previewBubbleCornerRadius = geometry.previewBubbleCornerRadius
+        self.previewBubbleOffsetY = geometry.previewBubbleOffsetY
+        self.previewFontSize = geometry.previewFontSize
+        self.iconFontSize = geometry.iconFontSize
+        self.chevronIconFontSize = geometry.chevronIconFontSize
+        self.syncRingSize = geometry.syncRingSize
+        self.syncRingLineWidth = geometry.syncRingLineWidth
         self.font = geometry.font
         self.candidateFont = geometry.candidateFont
     }
@@ -138,6 +180,17 @@ private struct ThemeGeometry {
     let candidateSelectionCornerRadius: CGFloat
     let candidateCellFontSize: CGFloat
     let specialKeyFontSize: CGFloat
+    let toastFontSize: CGFloat
+    let toastHPadding: CGFloat
+    let toastVPadding: CGFloat
+    let previewBubbleSide: CGFloat
+    let previewBubbleCornerRadius: CGFloat
+    let previewBubbleOffsetY: CGFloat
+    let previewFontSize: CGFloat
+    let iconFontSize: CGFloat
+    let chevronIconFontSize: CGFloat
+    let syncRingSize: CGFloat
+    let syncRingLineWidth: CGFloat
     let font: Font
     let candidateFont: Font
 }
@@ -154,6 +207,11 @@ public extension View {
             RoundedRectangle(cornerRadius: theme.keyCornerRadius, style: .continuous)
                 .fill(theme.fillColor(style: style, isPressed: isPressed))
         )
+    }
+
+    /// 悬浮元素（字符键按压气泡 / 同步 toast）共用阴影规格。
+    func floatingShadow() -> some View {
+        shadow(color: Color.black.opacity(0.2), radius: 2, y: 1)
     }
 }
 

@@ -4,13 +4,11 @@ import Synchronization
 
 /// WebDAV 同步编排（Squirrel 逻辑）：清空暂存目录 → 下载各设备目录的相关文件 →
 /// 把 installation.yaml 的 sync_dir 指到暂存目录 → `RimeSyncUserData` 导出+合并 →
-/// 上传本机导出目录 → 发完成通知。
+/// 上传本机导出目录。
 ///
 /// 只同步用户词库与自定义短语两个文件；暂存目录用完即弃，不留本地缓存。
+/// 成功与否仅以返回值表达（超时也按失败处理）；失败原因经 `RimeContext.log()` 记录。
 public enum WebDAVSync {
-    /// Darwin 通知名：键盘扩展同步完成，主 App 监听后刷新状态。
-    public static let completionNotificationName = "com.anjing.quill.webdav.sync.completed"
-
     /// 远程同步根目录（相对 baseURL）。默认 `Rime_Sync`，可在主 App 设置里自定义。
     public static var syncRootPath: String {
         let saved = WebDAVKeychainStore.load()?.syncPath?
@@ -71,7 +69,6 @@ public enum WebDAVSync {
         defer { inFlight.withLock { $0 = false } }
         guard let credentials = WebDAVKeychainStore.load() else {
             context.log("WebDAVSync: no credentials saved")
-            postCompletion()
             return false
         }
         // 引擎层保持后端无关，安装 ID 由同步层按保存的凭据设置。
@@ -100,7 +97,9 @@ public enum WebDAVSync {
                 }
             }
 
-            for device in devices {
+            for device in devices where device != RimeContext.installationID {
+                // 本机目录跳过下载：librime 合并的是外来数据，本机导出由
+                // `syncUserData` 自己生成，先下载纯属浪费（慢挂载上一次 4.5s+）。
                 let remoteDir = "\(rootPath)/\(device)"
                 let files: [String]
                 do {
@@ -170,38 +169,26 @@ public enum WebDAVSync {
                 }
             }
             context.log("WebDAVSync: completed")
-            // 只有同步成功才推进「最近同步于」时间戳；失败不写（主 App 读到的仍是上次成功时间）。
-            WebDAVKeychainStore.saveLastSyncDate(Date())
-            postCompletion()
             return true
         } catch {
             context.log("WebDAVSync: failed: \(error.localizedDescription)")
-            postCompletion()
             return false
         }
     }
 
-    /// 带超时的同步结果：竞速输家不被取消——超时判负时同步仍在后台跑，
-    /// 最终大概率完成（上传/合入照常发生），只是结果不再回报。
-    public enum SyncOutcome: Sendable {
-        case completed
-        case timedOut
-        case failed
-    }
-
-    /// 带超时的同步。用「竞速」而非「取消」：中途取消会让
+    /// 带超时的同步，超时按失败处理。用「竞速」而非「取消」：中途取消会让
     /// `withCheckedThrowingContinuation` 与队列回调双 resume；输家在后台跑完即被丢弃。
     @discardableResult
-    public static func syncWithTimeout(_ timeout: Duration = .seconds(30)) async -> SyncOutcome {
+    public static func syncWithTimeout(_ timeout: Duration = .seconds(60)) async -> Bool {
         await withCheckedContinuation { continuation in
             let winner = RaceWinner()
             let syncTask = Task {
                 let result = await sync()
-                winner.finish(result: result ? .completed : .failed, continuation)
+                winner.finish(result: result, continuation)
             }
             let timeoutTask = Task {
                 try? await Task.sleep(for: timeout)
-                winner.finish(result: .timedOut, continuation)
+                winner.finish(result: false, continuation)
             }
             // 两个 Task 被子闭包强持有即可保持存活；输家跑完即被丢弃。
             _ = syncTask
@@ -214,7 +201,7 @@ public enum WebDAVSync {
     private final class RaceWinner: Sendable {
         private let winner = Mutex(false)
 
-        func finish(result: SyncOutcome, _ continuation: CheckedContinuation<SyncOutcome, Never>) {
+        func finish(result: Bool, _ continuation: CheckedContinuation<Bool, Never>) {
             let shouldResume = winner.withLock { state in
                 if state { return false }
                 state = true
@@ -224,16 +211,5 @@ public enum WebDAVSync {
                 continuation.resume(returning: result)
             }
         }
-    }
-
-    /// 发 Darwin 通知。不携带 payload，成功与否以 `loadLastSyncDate()` 或返回值判断。
-    private static func postCompletion() {
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            CFNotificationName(completionNotificationName as CFString),
-            nil,
-            nil,
-            true
-        )
     }
 }

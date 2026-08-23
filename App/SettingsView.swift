@@ -16,7 +16,6 @@ struct SettingsView: View {
     @State private var syncAlert: SyncAlert?
     @State private var isConfirmingDelete = false
     @State private var didLoadCredentials = false
-    @State private var lastSyncDate: Date?
     @FocusState private var focusedField: WebDAVField?
 
     private enum WebDAVField: Hashable {
@@ -146,13 +145,6 @@ LabelledField(title: "安装 ID", infoAction: {
                     .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity)
                     .disabled(isTesting || allCredentialsEmpty)
-                    Button(role: .destructive) {
-                        isConfirmingDelete = true
-                    } label: {
-                        Text("删除凭据")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderless)
                 } header: {
                     HStack {
                         Text("同步")
@@ -169,14 +161,19 @@ LabelledField(title: "安装 ID", infoAction: {
                         .accessibilityLabel("关于同步")
                     }
                 } footer: {
-                    if let lastSyncDate {
-                        Text("最近同步于 \(lastSyncDate.formatted(date: .abbreviated, time: .standard))")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
                     Text("调起键盘后，长按空格键 3 秒开始同步。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        isConfirmingDelete = true
+                    } label: {
+                        Text("删除凭据")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderless)
                 }
 
                 Section("日志") {
@@ -222,7 +219,7 @@ LabelledField(title: "安装 ID", infoAction: {
                 )
             }
             .confirmationDialog(
-                "删除钥匙串中保存的同步凭据与最近同步时间？",
+                "删除钥匙串中保存的同步凭据？",
                 isPresented: $isConfirmingDelete,
                 titleVisibility: .visible
             ) {
@@ -233,15 +230,6 @@ LabelledField(title: "安装 ID", infoAction: {
             .task {
                 await rimeContext.start()
                 loadKeyDefaults()
-                refreshLastSync()
-                observeSyncCompletion()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                // 键盘扩展在别的 App 里同步时本 App 在后台；回到前台时刷新最近同步时间。
-                refreshLastSync()
-            }
-            .onDisappear {
-                removeSyncCompletionObserver()
             }
         }
     }
@@ -334,60 +322,15 @@ LabelledField(title: "安装 ID", infoAction: {
         }
     }
 
-    private func refreshLastSync() {
-        lastSyncDate = WebDAVKeychainStore.loadLastSyncDate()
-    }
-
-    /// 清除钥匙串中的凭据与最近同步时间（卸载重装不会清钥匙串，需显式删除）。
+    /// 清除钥匙串中的凭据（卸载重装不会清钥匙串，需显式删除）。
     private func deleteCredentials() {
         WebDAVKeychainStore.delete()
-        WebDAVKeychainStore.deleteLastSyncDate()
         serverURL = ""
         username = ""
         password = ""
         syncPath = ""
         installationID = ""
-        lastSyncDate = nil
-        syncAlert = SyncAlert(title: "已删除", message: "同步凭据与最近同步时间已从钥匙串清除。")
-    }
-
-    // MARK: - 同步完成通知
-
-    private func observeSyncCompletion() {
-        let name = WebDAVSync.completionNotificationName as CFString
-        let observer = SyncObserver.shared
-        observer.onSyncCompletion = {
-            // self 是值类型副本；@State 写入共享同一份存储，仍能刷新 UI。
-            self.refreshLastSync()
-        }
-        let center = CFNotificationCenterGetDarwinNotifyCenter()
-        let opaque = Unmanaged.passUnretained(observer).toOpaque()
-        // 先移除再注册：.task 在每次 appear 都会触发，直接 Add 会重复注册
-        // （一次通知触发多次回调），而 onDisappear 只 Remove 一次。
-        CFNotificationCenterRemoveObserver(center, opaque, CFNotificationName(name), nil)
-        CFNotificationCenterAddObserver(
-            center,
-            opaque,
-            { _, _, _, _, _ in
-                // 所有同步结束（成功或失败）都会发一次通知；失败不写时间戳，故这里
-                // 只是重新读取，读到的仍是上次成功同步的时间。
-                Task { @MainActor in
-                    SyncObserver.shared.onSyncCompletion?()
-                }
-            },
-            name,
-            nil,
-            .deliverImmediately
-        )
-    }
-
-    private func removeSyncCompletionObserver() {
-        CFNotificationCenterRemoveObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            Unmanaged.passUnretained(SyncObserver.shared).toOpaque(),
-            CFNotificationName(WebDAVSync.completionNotificationName as CFString),
-            nil
-        )
+        syncAlert = SyncAlert(title: "已删除", message: "同步凭据已从钥匙串清除。")
     }
 
     /// 逐级尝试直达键盘设置页，全部失败退回本 App 设置页（系统未公开直达 scheme）。
@@ -494,14 +437,4 @@ extension View {
     func clearableField(text: Binding<String>, isFocused: Bool) -> some View {
         modifier(ClearableFieldModifier(text: text, isFocused: isFocused))
     }
-}
-
-/// Darwin 通知观察者（CFNotificationCenter 需要一个类对象作为 observer）。
-@MainActor
-final class SyncObserver {
-    static let shared = SyncObserver()
-    private init() {}
-
-    /// 同步完成通知到达时在主线程执行的回调。
-    var onSyncCompletion: (() -> Void)?
 }

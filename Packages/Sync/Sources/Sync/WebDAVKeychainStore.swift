@@ -29,9 +29,8 @@ public struct WebDAVCredentials: Codable, Equatable, Sendable {
 /// WebDAV 凭据的 Keychain 读写。共享 access group `$(AppIdentifierPrefix)art.anjing.quill.shared`，
 /// 主 App 与键盘扩展均可访问（自签下 App Identifier Prefix 一致即可）。
 ///
-/// 条目清单（git 历史核查过，从未变更；卸载重装不清钥匙串，删除须显式覆盖全部名字）：
+/// 条目清单（git 历史核查过；卸载重装不清钥匙串，删除须显式覆盖全部名字）：
 /// - 凭据：service `art.anjing.quill.webdav` / account `config`
-/// - 最近同步时间：service `art.anjing.quill.webdav.syncstate` / account `lastSync`
 /// - Team 前缀探测（瞬态）：service `…webdav.probe` / account `config`
 ///
 /// 每个条目可能落在共享组或进程默认组，`delete()` 两组都清。
@@ -40,8 +39,6 @@ public struct WebDAVCredentials: Codable, Equatable, Sendable {
 public enum WebDAVKeychainStore {
     private static let service = "art.anjing.quill.webdav"
     private static let account = "config"
-    private static let lastSyncService = "art.anjing.quill.webdav.syncstate"
-    private static let lastSyncAccount = "lastSync"
 
     /// 钥匙串写入失败时携带具体 OSStatus 的原因。
     public enum KeychainError: Error {
@@ -73,11 +70,6 @@ public enum WebDAVKeychainStore {
 
     public static func delete() {
         delete(service: service, account: account)
-    }
-
-    /// 清除最近同步时间（随凭据一并删除时使用）。
-    public static func deleteLastSyncDate() {
-        delete(service: lastSyncService, account: lastSyncAccount)
     }
 
     /// 写入 generic password：优先共享 access group，失败回退进程默认 group。
@@ -142,22 +134,6 @@ public enum WebDAVKeychainStore {
     public static func load() -> WebDAVCredentials? {
         guard let data = load(service: service, account: account) else { return nil }
         return try? JSONDecoder().decode(WebDAVCredentials.self, from: data)
-    }
-
-    /// 记录最近一次同步完成时间（键盘扩展在同步成功后写入，主 App 读取展示）。
-    public static func saveLastSyncDate(_ date: Date) {
-        var value = date.timeIntervalSince1970
-        let data = Data(bytes: &value, count: MemoryLayout<Double>.size)
-        delete(service: lastSyncService, account: lastSyncAccount)
-        _ = upsert(service: lastSyncService, account: lastSyncAccount, data: data)
-    }
-
-    public static func loadLastSyncDate() -> Date? {
-        guard let data = load(service: lastSyncService, account: lastSyncAccount),
-              data.count == MemoryLayout<Double>.size else { return nil }
-        var value: Double = 0
-        _ = withUnsafeMutableBytes(of: &value) { data.copyBytes(to: $0) }
-        return Date(timeIntervalSince1970: value)
     }
 
     /// 解析共享 keychain access group `<TeamID>art.anjing.quill.shared`。

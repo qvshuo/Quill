@@ -1,7 +1,8 @@
 import Foundation
 
 /// 文件系统路径唯一来源：主 App、键盘扩展、同步层统一从这里取目录。
-/// App Group 可用时用户数据/日志落共享容器，否则各自私有目录回退；
+/// 本应用按自签安装设计，两个进程默认各自独立（词库/日志不共享）；
+/// 若签名带 App Group（如模拟器开发构建），则落共享容器。
 /// SharedSupport 是预构建 RIME 数据，键盘扩展的 Bundle.main 是 .appex，
 /// 需向上回溯宿主 App bundle。
 public enum Paths {
@@ -36,8 +37,8 @@ public enum Paths {
         return nil
     }
 
-    /// 用户数据目录优先使用 App Group（主 App 与键盘扩展共享）；无 App Group
-    /// 时回退到应用私有 Application Support 目录。
+    /// 用户数据目录：有 App Group（模拟器开发构建）时落共享容器；
+    /// 自签基线下各进程用私有 Application Support 目录。
     public static var userDataDirectory: URL? {
         if let group = appGroupContainer {
             return group.appendingPathComponent("Rime", isDirectory: true)
@@ -48,14 +49,13 @@ public enum Paths {
         return nil
     }
 
-    /// 日志目录：App Group 可用时在组容器下，否则 Documents/Logs（方便文件 App 导出）。
+    /// 日志目录：自签基线下放 Documents/Logs（键盘扩展可经文件 App 查看）；
+    /// 有 App Group 时两进程写同一份。
     public static var logDirectory: URL? {
         let base: URL?
         if let group = appGroupContainer {
             base = group
         } else {
-            // 无 App Group 时把日志放到 Documents/Logs，方便通过文件 App 导出
-            // （键盘扩展无法使用主 App 的 ShareLink，只能靠文件 App 查看）。
             base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         }
         guard let base else { return nil }

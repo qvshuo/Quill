@@ -148,6 +148,8 @@ public enum WebDAVKeychainStore {
     /// iOS 无公开 API 读自己的 entitlements，改用探测法：写一条不带 access group
     /// 的临时条目再读回，其默认 access group = `<TeamID><bundleID>`，取 bundle ID
     /// 之前的部分作为 Team 前缀。自签探测不到前缀时返回 nil，调用方回退进程默认 group。
+    /// 注意后缀匹配用 `art.anjing.quill`：主 App 与键盘扩展（`.keyboard`）的
+    /// bundle ID 都以它结尾，同一前缀提取对两个进程都成立。
     private static func resolveAccessGroup() -> String? {
         let probeService = service + ".probe"
         let probe: [String: Any] = [

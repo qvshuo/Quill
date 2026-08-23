@@ -36,7 +36,7 @@ public enum WebDAVSync {
     /// 在 librime 同步专用串行队列上执行一段引擎操作（如同步后的会话重建）。
     /// 与在途的 `syncUserData` 按 FIFO 顺序执行，且不阻塞主线程：同步超时后后台
     /// 「僵尸同步」仍可能持引擎锁跑 `syncUserData`，主线程直接调用会阻塞到它结束。
-    public static func runAfterSync(_ block: @escaping () -> Void) {
+    public static func runAfterSync(_ block: @escaping @Sendable () -> Void) {
         librimeSyncQueue.async(execute: block)
     }
 
@@ -92,12 +92,10 @@ public enum WebDAVSync {
         let rootPath = syncRootPath
 
         do {
-            // 清空并重建暂存目录
             let staging = stagingDirectory
             try? FileManager.default.removeItem(at: staging)
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
 
-            // 列出 Rime_Sync/ 下的设备目录
             var devices: [String] = []
             do {
                 let entries = try await client.listDirectory(relativePath: rootPath)
@@ -112,7 +110,6 @@ public enum WebDAVSync {
                 }
             }
 
-            // 下载每个设备目录里的相关文件到暂存
             for device in devices {
                 let remoteDir = "\(rootPath)/\(device)"
                 let files: [String]
@@ -137,8 +134,8 @@ public enum WebDAVSync {
                 }
             }
 
-            // 3.5 把其他设备目录里的 custom_phrase.txt 复制进本地用户目录。
-            // 注意：librime 同步只合并 *.userdb.txt；custom_phrase.txt 需手动覆盖到
+            // 把其他设备目录里的 custom_phrase.txt 复制进本地用户目录：
+            // librime 同步只合并 *.userdb.txt；custom_phrase.txt 需手动覆盖到
             // 用户目录，下一次会话创建时 StableDb 才会读它。
             if let userDir = Paths.userDataDirectory {
                 try? FileManager.default.createDirectory(at: userDir, withIntermediateDirectories: true)

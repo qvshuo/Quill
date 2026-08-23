@@ -33,7 +33,6 @@ extension RimeContext {
         try? FileManager.default.createDirectory(
             at: stagingDir, withIntermediateDirectories: true
         )
-        // 重写 installation.yaml（sync_dir → staging）。
         rewriteInstallationInfo(syncDir: stagingDir)
     }
 
@@ -59,6 +58,10 @@ extension RimeContext {
     }
 
     /// 写入 installation.yaml：`installation_id` + `backup_config_files` + `sync_dir`。
+    /// 读改写全程持锁：`ensureInstallationInfo`（启动任务）与 `setStagingDirectory`
+    /// （同步队列）可能交错，无锁会丢更新（如暂存覆盖被启动默认值冲掉）。
+    private static let installationFileLock = Mutex<Void>(())
+
     private func rewriteInstallationInfo(syncDir: URL) {
         guard let dir = Paths.userDataDirectory else { return }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -66,16 +69,25 @@ extension RimeContext {
             at: syncDir, withIntermediateDirectories: true
         )
 
-        let file = dir.appendingPathComponent("installation.yaml")
-        var lines = (try? String(contentsOf: file, encoding: .utf8))?
-            .components(separatedBy: .newlines) ?? []
-        lines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("installation_id:") }
-        lines.insert("installation_id: \"\(Self.installationID)\"", at: 0)
-        lines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("backup_config_files:") }
-        lines.append("backup_config_files: true")
-        lines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("sync_dir:") }
-        lines.append("sync_dir: \"\(syncDir.path)\"")
-        try? lines.joined(separator: "\n").write(to: file, atomically: true, encoding: .utf8)
+        Self.installationFileLock.withLock { _ in
+            let file = dir.appendingPathComponent("installation.yaml")
+            // 按行拆分时剥掉 CRLF 的 \r 残留，避免写回的 YAML 行尾混入 \r。
+            var lines = ((try? String(contentsOf: file, encoding: .utf8))?
+                .components(separatedBy: "\n") ?? [])
+                .map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+            lines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("installation_id:") }
+            lines.insert("installation_id: \"\(Self.installationID)\"", at: 0)
+            lines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("backup_config_files:") }
+            lines.append("backup_config_files: true")
+            lines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("sync_dir:") }
+            lines.append("sync_dir: \"\(syncDir.path)\"")
+            do {
+                try lines.joined(separator: "\n").write(to: file, atomically: true, encoding: .utf8)
+            } catch {
+                // 写失败若被吞掉，librime 会按旧 sync_dir 导出/合并，同步静默错位——必须留痕。
+                log("installation.yaml write failed: \(error.localizedDescription)")
+            }
+        }
         log("sync_dir = \(syncDir.path)")
     }
 

@@ -80,18 +80,13 @@ public struct KeyboardView: View {
         // 平滑滑入，无需控制器手动设置 preferredContentSize。
         .frame(height: theme.totalHeight)
         .frame(maxWidth: .infinity)
-        // 同步进度提示：候选栏顶部居中悬浮胶囊，不挡按键点击。
-        // `started` 持续展示直到同步结束被替换；`.completed / .failed` 由控制器
-        // （toast 的订阅方）按结果计时后清除，视图不持有计时逻辑。
+        // 同步进度提示：候选栏顶部居中悬浮胶囊，不挡按键点击。toast 状态只在
+        // `SyncToastOverlay` 自身 body 读取，变化不重求值整棵键盘树。
         .overlay(alignment: .top) {
-            if let toast = inputState.toast {
-                SyncToastView(toast: toast, theme: theme)
-                    .padding(.top, 4)
-                    .transition(.opacity)
-            }
+            SyncToastOverlay(inputState: inputState, theme: theme)
         }
-        .animation(.easeInOut(duration: 0.15), value: inputState.toast)
         .onAppear {
+            KeyboardFeedback.prepare()
             viewModel.handleKeyboardTypeChange(keyboardType)
             viewModel.handleReturnKeyType(returnKeyType)
             rimeContext.setAsciiMode(viewModel.inputLanguage == .english)
@@ -114,6 +109,8 @@ public struct KeyboardView: View {
     }
 
     private func selectAndCollapse(_ index: Int) {
+        // 与 handleKey 同一门禁：同步 toast 期间不响应候选选择 / 展开收起。
+        guard inputState.toast == nil else { return }
         candidatesExpanded = false
         onKey(.selectCandidate(index))
     }
@@ -174,6 +171,10 @@ public struct KeyboardView: View {
         // 同步 toast 展示期间屏蔽所有按键（字母/功能/切换键），待同步结果收起后再恢复。
         // `.startSync` 在 toast 置位前通过本入口，故长按空格仍能启动同步。
         guard inputState.toast == nil else { return }
+        // @State 的 viewModel 在 rootView 替换时保留首份实例，其弱引用可能指向旧
+        // context；consume() 前刷新为当前传入实例，避免走错对象（needsConfirm 等）。
+        viewModel.rimeContext = rimeContext
+        viewModel.inputState = inputState
         if let transformed = viewModel.consume(action) {
             onKey(transformed)
             // 中/英切换：视图按当前语言把 ascii_mode 写回 RIME。
@@ -282,6 +283,24 @@ private struct KeyboardRowView: View {
     ) -> KeyDescriptor {
         guard hasReturn, key.action.isReturn else { return key }
         return key.with(label: effectiveReturnLabel ?? key.label, style: highlightReturn ? .confirm : key.style)
+    }
+}
+
+/// 同步 toast 悬浮层：在自身 body 作用域观察 `inputState.toast`，
+/// toast 出现/替换/消失只重求值本视图，不重求值整棵键盘树。
+private struct SyncToastOverlay: View {
+    let inputState: InputState
+    let theme: Theme
+
+    var body: some View {
+        Group {
+            if let toast = inputState.toast {
+                SyncToastView(toast: toast, theme: theme)
+                    .padding(.top, 4)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: inputState.toast)
     }
 }
 

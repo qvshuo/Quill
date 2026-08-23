@@ -70,7 +70,8 @@ enum RowLayoutMath {
         let returnLabelWidth = parameters.returnLabelWidth
         let gridWidth = totalWidth - keyboardLeading - keyboardTrailing
         // 字母格宽：以 10 键行推导，全键盘共用（对齐计算的基础单位）。
-        let letter = (gridWidth - 9 * keySpacing) / 10
+        // 退化窄宽度下可为负，clamp 到 0 避免产生负帧宽（weightedRow 同款防护）。
+        let letter = max(0, (gridWidth - 9 * keySpacing) / 10)
 
         if keys.contains(where: { $0.action.isSpace }) {
             return bottomRow(
@@ -130,7 +131,7 @@ enum RowLayoutMath {
         // 文案过长时以「空格保底」为上限让出，总量守恒。
         let maxReturn = max(0, gridWidth - CGFloat(keys.count - 1) * keySpacing - otherFixed - minSpaceWidth)
         returnWidth = min(returnWidth, maxReturn)
-        let spaceWidth = gridWidth - CGFloat(keys.count - 1) * keySpacing - otherFixed - returnWidth
+        let spaceWidth = max(0, gridWidth - CGFloat(keys.count - 1) * keySpacing - otherFixed - returnWidth)
 
         var widths = [CGFloat](repeating: 0, count: keys.count)
         for i in keys.indices {
@@ -162,7 +163,11 @@ enum RowLayoutMath {
     ) -> RowLayout {
         guard let shiftIndex = keys.firstIndex(where: { $0.action.isShift }),
               let backspaceIndex = keys.firstIndex(where: { $0.action.isBackspace }),
-              shiftIndex != backspaceIndex else {
+              shiftIndex != backspaceIndex,
+              // 对齐空隙的计算假定 ⇧ 在行首、⌫ 在行尾；布局异常时退回权重分摊，
+              // 避免 gaps[backspaceIndex - 1] 静默改错键位间隙。
+              shiftIndex == 0,
+              backspaceIndex == keys.count - 1 else {
             return weightedRow(keys: keys, gridWidth: gridWidth, sideInset: 0, keySpacing: keySpacing)
         }
         let middleCount = keys.count - 2
@@ -199,7 +204,9 @@ enum RowLayoutMath {
             fixedSum += fixed
         }
         let middleCount = keys.count - specials.count
-        let middleWidth = middleCount > 0 ? (gridWidth - fixedSum - CGFloat(keys.count - 1) * keySpacing) / CGFloat(middleCount) : 0
+        let middleWidth = middleCount > 0
+            ? max(0, (gridWidth - fixedSum - CGFloat(keys.count - 1) * keySpacing) / CGFloat(middleCount))
+            : 0
         for i in keys.indices where !specials.contains(i) {
             widths[i] = middleWidth
         }

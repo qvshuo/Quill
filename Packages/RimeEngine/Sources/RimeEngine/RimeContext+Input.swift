@@ -40,7 +40,10 @@ extension RimeContext {
         // 注意：本键盘无前后翻页，librime 当前页恒为 0，故候选数组下标 ==
         // librime 全局下标，`select_candidate`（全局）与页内下标恰好一致。
         // 若将来引入翻页，页内选择须改用 `select_candidate_on_current_page`。
-        _ = rimeAPI.select_candidate!(session, max(0, index))
+        // 选择失败（下标越界等）会表现为「点了候选没反应」，留日志便于排查。
+        if !rimeAPI.select_candidate!(session, max(0, index)) {
+            log("selectCandidate(\(index)) failed")
+        }
         refreshContext()
     }
 
@@ -49,6 +52,8 @@ extension RimeContext {
         defer { lock.unlock() }
         guard isReady, session != 0 else { return }
         rimeAPI.clear_composition!(session)
+        // 组合清空时一并丢弃尚未消费的 commit，避免过期文本在下次 pollCommit 冒出。
+        commitText = ""
         refreshContext()
     }
 

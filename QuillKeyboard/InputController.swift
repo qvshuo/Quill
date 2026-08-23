@@ -46,16 +46,15 @@ final class InputController: UIInputViewController {
     }
 
     /// 把「允许完全访问」状态写入共享 App Group 默认值，供主 App 判断是否提示授权。
-    /// 无完全访问权限时键盘没有共享容器写权限（写入静默失败），因此该键只会变 true；
-    /// 若用户在系统设置里关闭完全访问，需等键盘再次出现才会更新为 false。
+    /// 无完全访问权限时键盘没有共享容器写权限（写入静默失败），因此该键实际只可能
+    /// 被写成 true；用户关闭完全访问后扩展无法再向共享容器写入 false——撤销动作
+    /// 在扩展侧不可观测，只能等权限恢复后重新写回 true。
     private func recordFullAccessState() {
-        guard hasFullAccess else { return }
-        UserDefaults(suiteName: Paths.appGroupID)?.set(true, forKey: "hasFullAccess")
+        UserDefaults(suiteName: Paths.appGroupID)?.set(hasFullAccess, forKey: "hasFullAccess")
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
-        // 宿主文本字段变化时刷新「输入框是否有文本」状态（含退格清空）与键盘类型/回车键文案。
         refreshInputTextState()
         refreshKeyboardContext()
     }
@@ -67,7 +66,8 @@ final class InputController: UIInputViewController {
         refreshKeyboardContext()
         // fcitx5-ios 同款：viewDidLoad 挂载会造成巨大布局位移，须在 viewWillAppear 挂载。
         // 高度由 SwiftUI .frame(height:) 内在尺寸决定，无需 preferredContentSize。
-        guard let hostingController else { return }
+        // 幂等挂载：viewWillAppear 可多次触发，重复 addChild / activate 约束会累积。
+        guard let hostingController, hostingController.view.superview == nil else { return }
         addChild(hostingController)
         view.addSubview(hostingController.view)
         NSLayoutConstraint.activate([
@@ -195,7 +195,6 @@ final class InputController: UIInputViewController {
                 resetDoubleSpaceState()
             }
         case .startSync:
-            // 长按空格键 5 秒触发手动 WebDAV 同步。
             resetDoubleSpaceState()
             startManualSync()
             return
@@ -258,8 +257,11 @@ final class InputController: UIInputViewController {
                 if self.rimeContext.preedit.isEmpty {
                     // 在同步专用串行队列上重建会话：超时后后台僵尸同步仍可能持引擎锁跑
                     // syncUserData，主线程直接调用会阻塞到它结束（键盘假死）。
+                    // 直接捕获 context 单例，不经过 self——否则闭包会把控制器强持有
+                    // 到僵尸同步结束（最坏 15s+）。
+                    let rimeForRecreate = self.rimeContext
                     WebDAVSync.runAfterSync {
-                        self.rimeContext.recreateSession()
+                        rimeForRecreate.recreateSession()
                     }
                 }
                 let toast: SyncToast = success ? .completed : .failed
@@ -295,8 +297,7 @@ final class InputController: UIInputViewController {
 
     /// 直接上屏 preedit 原文并重置 RIME（用于 RIME 未确认/未处理组合的兜底提交）。
     private func commitRawPreedit(_ text: String) {
-        textDocumentProxy.unmarkText()
-        insertToProxy(text)
+        commitReplacingMarkedText(text)
         rimeContext.reset()
         displayedPreedit = ""
     }
@@ -328,15 +329,31 @@ final class InputController: UIInputViewController {
         inputState.hasInputText = true
     }
 
+    /// 上屏最终文本（候选词 / preedit 原文）。组合期间宿主字段里的 marked 区是
+    /// 原始拼音，直接 `unmarkText()` 会把拼音固化进文档、随后的插入变成「拼音+候选」
+    /// 拼接（部分 host 不替换 marked range）。改为用 setMarkedText 以最终文本
+    /// 覆盖 marked 区后再固化；无 marked 区时按普通插入处理。
+    private func commitReplacingMarkedText(_ text: String) {
+        if displayedPreedit.isEmpty {
+            insertToProxy(text)
+        } else {
+            let end = text.utf16.count
+            textDocumentProxy.setMarkedText(text, selectedRange: NSRange(location: end, length: 0))
+            textDocumentProxy.unmarkText()
+            markInputTextInserted()
+        }
+    }
+
     private func resetDoubleSpaceState() {
         doubleSpaceTracker.reset()
     }
 
-    /// 同步目标输入框中的预编辑/上屏文本。
+    /// 把 RIME 的 commit / preedit 同步进宿主输入框（marked 区维护）。
+    /// 清空组合必须 `setMarkedText("")` + `unmarkText()`：裸 `unmarkText()` 会把
+    /// 最后一个 marked 字母固化进文档，表现为需要两次退格。
     private func syncText() {
         if let commit = rimeContext.pollCommit(), !commit.isEmpty {
-            textDocumentProxy.unmarkText()
-            insertToProxy(commit)
+            commitReplacingMarkedText(commit)
             displayedPreedit = ""
         }
 

@@ -5,21 +5,29 @@ import Synchronization
 /// 展开候选网格的纯排版计算：按候选文本测量宽度排满即换行。抽成独立类型便于单元测试。
 enum CandidateGridLayout {
     /// 候选文本宽度的进程级缓存（fontSize|text → 宽度）。拼音候选高频重复，
-    /// 避免每次展开网格都重新测量同一批文本。
+    /// 避免每次展开网格都重新测量同一批文本。上限淘汰：键含完整候选文本，
+    /// 长会话会无界累积，而键盘扩展有 ~77MB Jetsam 预算。
     private static let widthCache = Mutex<[String: CGFloat]>([:])
+    private static let widthCacheLimit = 512
 
     /// 候选格横向内边距（每侧 10pt）。行宽测量必须与 `CandidatePanel` 单元格的
     /// `.padding(.horizontal, 10)` 一致，否则排出的行数偏多、格子互相挤压。
     private static let cellHPadding: CGFloat = 10
 
     /// 候选文本的渲染宽度（用与 `candidateFont` 一致的 `UIFont` 测量）。
+    /// 缓存键含字体名：同字号不同 weight 的字体宽度不同，只按 pointSize 会串值。
     static func textWidth(_ text: String, font: UIFont) -> CGFloat {
-        let key = "\(font.pointSize)|\(text)"
+        let key = "\(font.fontDescriptor.postscriptName)|\(text)"
         if let width = widthCache.withLock({ $0[key] }) {
             return width
         }
         let width = (text as NSString).size(withAttributes: [.font: font]).width
-        widthCache.withLock { $0[key] = width }
+        widthCache.withLock { cache in
+            if cache.count >= widthCacheLimit {
+                cache.removeAll(keepingCapacity: true)
+            }
+            cache[key] = width
+        }
         return width
     }
 

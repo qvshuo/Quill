@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 @preconcurrency import RimeEngineC
 
 extension RimeContext {
@@ -77,11 +78,25 @@ extension RimeContext {
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         ) else { return }
-        for case let fileURL as URL in enumerator {
-            if fileURL.lastPathComponent == "LOCK" {
+        for case let fileURL as URL in enumerator where fileURL.lastPathComponent == "LOCK" {
+            // App Group 下主 App 与键盘扩展共享用户目录：对方进程可能正持有活锁。
+            // 仅删除能成功拿到非阻塞 flock 的 LOCK（无持有者 = 崩溃残留），
+            // 直接 unlink 活锁会让两个 leveldb 对同一数据库各自加锁新 inode，失去互斥。
+            if isUnheld(fileURL) {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
+    }
+
+    /// 尝试对文件加非阻塞排他 flock；成功说明没有任何进程持有（leveldb 用同款
+    /// 方式持锁），失败（EWOULDBLOCK）说明有活的持有者。
+    private func isUnheld(_ url: URL) -> Bool {
+        let fd = open(url.path, O_RDONLY)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { return false }
+        flock(fd, LOCK_UN)
+        return true
     }
 
     private func setupOnce() throws {
@@ -149,10 +164,16 @@ extension RimeContext {
         let schemas = readSchemaList()
 
         let preferred = "luna_pinyin"
+        let schemaSelected: Bool
         if schemas.contains(preferred) {
-            _ = rimeAPI.select_schema!(session, preferred)
+            schemaSelected = rimeAPI.select_schema!(session, preferred)
         } else if let first = schemas.first {
-            _ = rimeAPI.select_schema!(session, first)
+            schemaSelected = rimeAPI.select_schema!(session, first)
+        } else {
+            schemaSelected = false
+        }
+        if !schemaSelected {
+            log("selectDefaultSchema: no schema selected (available: \(schemas))")
         }
 
         // 按字段类型写入 ascii_mode：.default 中文(false)，.asciiCapable 英文(true)。

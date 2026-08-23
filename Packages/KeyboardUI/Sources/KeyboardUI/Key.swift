@@ -101,6 +101,11 @@ public struct Key: View {
                     onRelease: {
                         isPressed = false
                         repeater?.endPress()
+                    },
+                    onCancel: {
+                        // 触摸被系统取消或滑离按键：停止连打并复位视觉，不产生动作。
+                        isPressed = false
+                        repeater?.endPress()
                     }
                 )
             }
@@ -138,6 +143,13 @@ public struct Key: View {
                         if !spaceHoldTriggeredSync {
                             action(.space)
                         }
+                    },
+                    onCancel: {
+                        // 系统取消触摸 / 手指滑离：不插入空格（否则来电横幅等
+                        // 中断会把空格打进文档），只复位按压视觉与长按计时。
+                        isPressed = false
+                        spaceHoldTriggeredSync = false
+                        cancelSpaceHoldTimer()
                     }
                 )
             }
@@ -173,6 +185,7 @@ public struct Key: View {
                 .font(.system(size: 21, weight: .medium))
         case .space:
             Color.clear
+                .accessibilityLabel("空格")
         case .return:
             Text(descriptor.label)
                 .font(.system(size: theme.specialKeyFontSize, weight: .regular))

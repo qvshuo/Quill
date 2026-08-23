@@ -180,7 +180,8 @@ LabelledField(title: "安装 ID", infoAction: {
                 }
 
                 Section("日志") {
-                    if let url = rimeContext.exportLogURL() {
+                    if let url = rimeContext.exportLogURL(),
+                       FileManager.default.fileExists(atPath: url.path) {
                         ShareLink(item: url) {
                             Label("导出日志", systemImage: "square.and.arrow.up")
                         }
@@ -293,7 +294,6 @@ LabelledField(title: "安装 ID", infoAction: {
                 do {
                     _ = try await client.listDirectory(relativePath: rootPath)
                 } catch WebDAVClient.WebDAVError.serverError(let code) where code == 404 {
-                    // 目录不存在不算连接失败，允许保存凭据。
                 }
                 let saveCreds = WebDAVCredentials(
                     baseURL: trimmedURL,
@@ -338,9 +338,14 @@ LabelledField(title: "安装 ID", infoAction: {
             // self 是值类型副本；@State 写入共享同一份存储，仍能刷新 UI。
             self.refreshLastSync()
         }
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        let opaque = Unmanaged.passUnretained(observer).toOpaque()
+        // 先移除再注册：.task 在每次 appear 都会触发，直接 Add 会重复注册
+        // （一次通知触发多次回调），而 onDisappear 只 Remove 一次。
+        CFNotificationCenterRemoveObserver(center, opaque, CFNotificationName(name), nil)
         CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            Unmanaged.passUnretained(observer).toOpaque(),
+            center,
+            opaque,
             { _, _, _, _, _ in
                 // 所有同步结束（成功或失败）都会发一次通知；失败不写时间戳，故这里
                 // 只是重新读取，读到的仍是上次成功同步的时间。

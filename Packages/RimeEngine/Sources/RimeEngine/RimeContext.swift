@@ -40,7 +40,10 @@ public final class RimeContext: @unchecked Sendable {
     public internal(set) var candidates: [Candidate] = []
     public internal(set) var preedit: String = ""
     public internal(set) var highlightedCandidateIndex: Int = 0
-    public internal(set) var commitText: String = ""
+    /// 一次性 commit 缓冲：只经 `pollCommit()` 消费，无 UI 观察者。
+    /// 标记 `@ObservationIgnored`：它在持锁下由任意线程（含同步队列的
+    /// `recreateSession`）写入，不能走「只在主线程写」的可观察状态通道。
+    @ObservationIgnored public internal(set) var commitText: String = ""
 
     let logFileName = "quill.log"
 

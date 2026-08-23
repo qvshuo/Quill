@@ -91,7 +91,7 @@ public final class KeyboardViewModel {
 
     public var currentRows: [RowDescriptor] {
         let key = CachedRowsKey(layout: currentLayout, language: inputLanguage, shift: shiftState)
-        if let cachedRowsKey, cachedRowsKey == key, !cachedRows.isEmpty {
+        if let cachedRowsKey, cachedRowsKey == key {
             return cachedRows
         }
         guard let descriptor = cachedLayouts[currentLayout]?[inputLanguage] else { return [] }

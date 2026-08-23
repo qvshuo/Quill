@@ -30,9 +30,9 @@ extension RimeContext {
         // 只保留 quill.log 与其 .old 轮转件；真正的 RIME/glog 详情仍走 stderr 进 quill.log。
         pruneGlogFiles()
         rotateLogFileIfNeeded(url)
-        let cPath = (url.path as NSString).utf8String
-        guard let cPath else { return }
-        guard let file = fopen(cPath, "a") else { return }
+        // withCString 保证 C 路径指针在 fopen 调用期间存活（`(NSString).utf8String`
+        // 的指针只保证存活到当前表达式结束，跨语句使用是悬垂模式）。
+        guard let file = url.path.withCString({ fopen($0, "a") }) else { return }
         dup2(fileno(file), STDERR_FILENO)
         fclose(file)
     }

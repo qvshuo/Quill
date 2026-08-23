@@ -17,34 +17,34 @@ public enum KeyAction: Sendable, Equatable {
 }
 
 public extension KeyAction {
-    public var isReturn: Bool {
+    var isReturn: Bool {
         if case .return = self { return true }
         return false
     }
 
-    public var isSpace: Bool {
+    var isSpace: Bool {
         if case .space = self { return true }
         return false
     }
 
-    public var isShift: Bool {
+    var isShift: Bool {
         if case .shift = self { return true }
         return false
     }
 
-    public var isBackspace: Bool {
+    var isBackspace: Bool {
         if case .backspace = self { return true }
         return false
     }
 
-    public var isToggle: Bool {
+    var isToggle: Bool {
         switch self {
         case .numbers, .symbols: return true
         default: return false
         }
     }
 
-    public var isCharacter: Bool {
+    var isCharacter: Bool {
         if case .character = self { return true }
         return false
     }

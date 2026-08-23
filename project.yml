@@ -10,6 +10,9 @@ settings:
     SWIFT_VERSION: "6.2"
     TARGETED_DEVICE_FAMILY: "1"
     IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    # 版本号唯一来源：两个 target 的 Info.plist 引用 $(MARKETING_VERSION)/$(CURRENT_PROJECT_VERSION)。
+    MARKETING_VERSION: "1.0.2"
+    CURRENT_PROJECT_VERSION: "3"
 packages:
   RimeEngine:
     path: Packages/RimeEngine
@@ -27,7 +30,8 @@ targets:
       - path: App
     preBuildScripts:
       - name: Copy SharedSupport
-        script: cp -R "${SRCROOT}/Resources/SharedSupport" "${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/"
+        # ditto 会整体替换目标目录；cp -R 到已存在的目录会嵌套出 SharedSupport/SharedSupport。
+        script: rm -rf "${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/SharedSupport" && cp -R "${SRCROOT}/Resources/SharedSupport" "${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/SharedSupport"
         basedOnDependencyAnalysis: false
         outputPaths:
           - $(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/SharedSupport
@@ -35,8 +39,9 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Quill 输入法
-        CFBundleShortVersionString: 1.0.1
-        CFBundleVersion: "2"
+        # 版本号经 build settings 注入（唯一来源见 settings.base 的 MARKETING_VERSION）。
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
@@ -72,10 +77,8 @@ targets:
       path: QuillKeyboard/Info.plist
       properties:
         CFBundleDisplayName: Quill 输入法
-        CFBundleShortVersionString: 1.0.1
-        CFBundleVersion: "2"
-        UIFileSharingEnabled: true
-        LSSupportsOpeningDocumentsInPlace: true
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionAttributes:
             IsASCIICapable: false

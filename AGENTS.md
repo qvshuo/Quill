@@ -103,6 +103,7 @@ The main **app does NOT depend on KeyboardUI** (the settings icon uses system co
 - `InputState` (`@MainActor`, `KeyboardUI`, **owned by `InputController`**) holds **host/sync UI state**: `hasInputText`, `toast`.
 
 Never pass `hasInputText` or `preedit` as `KeyboardView` init params — replacing `UIHostingController.rootView` with a same-typed view preserves `@State`, so init values are ignored on later rebuilds. Scope the reads instead (see Return key below).
+- **No retained context refs in `KeyboardViewModel`** — `consume(_:rimeContext:)` takes the context explicitly per call (default `nil`, tests pass nothing). Do not reintroduce weak vars on the model: `@State` persists the first instance across rootView replacements, so stored refs silently go stale.
 
 ### RimeContext essentials
 

@@ -16,8 +16,9 @@ jobs:
 
       - name: Select latest Xcode
         run: |
-          ls /Applications | grep "^Xcode" | sort -V | tail -1
-          sudo xcode-select -s "/Applications/$(ls /Applications | grep '^Xcode' | sort -V | tail -1).app"
+          latest="$(ls /Applications | grep '^Xcode' | sort -V | tail -1)"
+          echo "Using $latest"
+          sudo xcode-select -s "/Applications/$latest"
 
       - name: Build unsigned device app
         run: |

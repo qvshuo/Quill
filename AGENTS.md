@@ -47,7 +47,7 @@ Unsigned simulator build:
 
 ```sh
 xcodebuild -project Quill.xcodeproj -scheme Quill -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 16' build \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' build \
   CODE_SIGNING_ALLOWED=NO
 ```
 
@@ -55,7 +55,7 @@ Simulator build that embeds App Group / keyboard entitlements:
 
 ```sh
 xcodebuild -project Quill.xcodeproj -scheme Quill -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 16' build \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' build \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="Apple Development" \
   DEVELOPMENT_TEAM=<TEAM_ID> ENTITLEMENTS_ALLOWED=YES
 ```
@@ -279,7 +279,7 @@ Run `scripts/build-prebuilt-data.sh` (macOS-native librime + `rime_deployer`) af
 
 ```sh
 xcodebuild test -project Quill.xcodeproj -scheme Quill -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 16' CODE_SIGNING_ALLOWED=NO
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' CODE_SIGNING_ALLOWED=NO
 ```
 
 - Scheme test target = `QuillKeyboardUITests` (swift-testing; the hostless bundle links `KeyboardUI` + `RimeEngine` + `Models` + the binary xcframeworks).

@@ -61,7 +61,6 @@ struct SettingsView: View {
                             .frame(width: 24)
                         Text(isOurKeyboardEnabled ? "Quill 输入法已启用" : "Quill 输入法未启用")
                     }
-                    .padding(.top, 8)
                     if !isOurKeyboardEnabled {
                         Button {
                             openKeyboardSettings()
@@ -212,6 +211,7 @@ struct SettingsView: View {
             .formStyle(.grouped)
             .scrollDismissesKeyboard(.immediately)
             .scrollEdgeEffectStyle(.soft, for: .top)
+            .padding(.top, 8)
             .navigationTitle("Quill 输入法")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {

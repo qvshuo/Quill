@@ -13,7 +13,7 @@ public struct KeyboardView: View {
     let returnKeyType: UIReturnKeyType
     let onKey: (KeyAction) -> Void
 
-    /// 主题跟随系统深浅色，控制器不解析、由 SwiftUI 环境自动重求值。
+    /// 主题跟随宿主 App 的深浅色（同 fcitx5-ios），控制器不解析、由 SwiftUI 环境自动重求值。
     private var resolvedTheme: Theme {
         colorScheme == .dark ? .dark : .light
     }

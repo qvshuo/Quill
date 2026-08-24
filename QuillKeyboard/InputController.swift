@@ -49,27 +49,12 @@ final class InputController: UIInputViewController {
         refreshKeyboardContext()
     }
 
-    /// 切换深浅色后首次调起时真实 trait 未传播到位，首帧会闪默认浅色：
-    /// 先钉住系统风格（层级外拿不到宿主风格），真实风格抵达后解除。
-    private func pinInterfaceStyle() {
-        hostingController?.view.overrideUserInterfaceStyle =
-            UIScreen.main.traitCollection.userInterfaceStyle
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        if previousTraitCollection?.userInterfaceStyle != traitCollection.userInterfaceStyle {
-            hostingController?.view.overrideUserInterfaceStyle = .unspecified
-        }
-    }
-
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         refreshInputTextState()
         refreshKeyboardContext()
         // viewDidLoad 挂载会有巨大布局位移，须在此挂载；幂等防重复 addChild / 约束累积。
         guard let hostingController, hostingController.view.superview == nil else { return }
-        pinInterfaceStyle()
         addChild(hostingController)
         view.addSubview(hostingController.view)
         NSLayoutConstraint.activate([
@@ -118,7 +103,6 @@ final class InputController: UIInputViewController {
         hostingController.view.backgroundColor = .clear
         view.backgroundColor = .clear
         self.hostingController = hostingController
-        pinInterfaceStyle()
     }
 
     private func makeKeyboardView() -> KeyboardView {

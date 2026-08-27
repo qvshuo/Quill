@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="128" height="128" src="App/Assets.xcassets/AppIcon.appiconset/Icon-AppStore.png" alt="Quill 输入法 logo">
+  <img width="96" height="96" style="border-radius: 22%;" src="App/Assets.xcassets/AppIcon.appiconset/Icon-AppStore.png" alt="Quill 输入法 logo">
 </p>
 
 # Quill 输入法

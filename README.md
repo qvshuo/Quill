@@ -1,3 +1,7 @@
+<p align="center">
+  <img width="128" height="128" src="App/Assets.xcassets/AppIcon.appiconset/Icon-AppStore.png" alt="Quill 输入法 logo">
+</p>
+
 # Quill 输入法
 
 一款极简的 iOS 拼音输入法，基于 RIME 引擎。
@@ -7,6 +11,13 @@
 - **全拼输入**：朙月拼音方案，支持中英混输
 - **多设备同步**：通过 WebDAV 同步用户词库与自定义短语
 - **深浅色跟随**：外观自动适配系统深浅色模式
+
+## 截图
+
+<p align="center">
+  <img width="315" src="screenshots/light.png" alt="Quill 浅色模式">
+  <img width="315" src="screenshots/dark.png" alt="Quill 深色模式">
+</p>
 
 ## 安装
 
